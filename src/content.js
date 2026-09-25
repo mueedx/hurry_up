@@ -169,7 +169,11 @@
    */
   function isActionElement(el) {
     if (!el || !el.tagName) return false;
-    if (["A", "BUTTON", "INPUT"].includes(el.tagName)) return true;
+    if (el.tagName === "A" || el.tagName === "BUTTON") return true;
+    if (el.tagName === "INPUT") {
+      const type = (el.getAttribute("type") || "text").toLowerCase();
+      return ["button", "submit", "reset", "image"].includes(type);
+    }
     return el.getAttribute("role") === "button";
   }
 
