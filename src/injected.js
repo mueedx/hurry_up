@@ -1,14 +1,23 @@
 /**
  * Hurry Up Extension - Main World Injector
  * Runs at document_start in the MAIN world to override native timers, clocks & network APIs.
+ *
+ * Safety contract: every patch installed here is a pass-through until the ISOLATED-world
+ * content script dispatches __HURRY_UP_CONFIG_SYNC__ with `enabled: true`, which only
+ * happens for pages that pass the countdown-gate heuristic (or when the user explicitly
+ * turns gate detection off). Ordinary websites therefore keep fully native timing.
  */
 (() => {
   if (window.__HURRY_UP_INJECTED__) return;
   window.__HURRY_UP_INJECTED__ = true;
 
-  // Active configuration cache in page context
+  // Active configuration cache in page context.
+  // `enabled` starts false on purpose: every timer patch below is a pass-through
+  // until the ISOLATED-world content script confirms that this page really is a
+  // countdown / wait gate. Ordinary sites (YouTube, chat apps, dashboards, video
+  // players) therefore keep completely native timing.
   const state = {
-    enabled: true,
+    enabled: false,
     speedUpTimers: true,
     mode: "instant", // "instant" or "accelerated"
     speedMultiplier: 50,
@@ -22,6 +31,15 @@
       "countdown_complete", "ajax/verify", "token", "download_url"
     ]
   };
+
+  // --- Safety limits -------------------------------------------------------
+  const INSTANT_FLOOR_MS = 25; // Never collapse a wait to 0ms: that turns a gate
+                               // countdown into a tight CPU loop and starves the page.
+  const MAX_CLOCK_SKEW_MS = 15 * 60 * 1000; // Hard ceiling for the virtual clock.
+  const INITIAL_SKEW_MS = 60000; // First jump once a gate page is confirmed.
+  const CLOCK_STEP_MS = 2000; // Growth per poll tick while a gate is active.
+  const POLL_INTERVAL_MS = 250;
+  const STAT_THROTTLE_MS = 2000; // Keep chrome.storage writes far below sync quota.
 
   // Helper to cloak functions so function.toString() looks native
   function cloak(fn, originalName) {
@@ -52,15 +70,26 @@
   const originalSetInterval = window.setInterval;
   const originalClearTimeout = window.clearTimeout;
   const originalClearInterval = window.clearInterval;
-  const originalRequestAnimationFrame = window.requestAnimationFrame;
 
   // Backup native network primitives
   const originalFetch = window.fetch;
   const originalXhrOpen = window.XMLHttpRequest ? window.XMLHttpRequest.prototype.open : null;
   const originalXhrSend = window.XMLHttpRequest ? window.XMLHttpRequest.prototype.send : null;
 
-  // Track virtual fast-forward clock delta
+  // Track virtual fast-forward clock delta. It only ever moves once a countdown
+  // gate has been confirmed, and it is always clamped to MAX_CLOCK_SKEW_MS.
   let fastForwardDeltaMs = 0;
+
+  // Throttled stat reporting: a fast-forwarded gate can rewrite hundreds of timers,
+  // and one storage write per timer used to stall the page and blow the
+  // chrome.storage.sync write quota.
+  let lastStatAt = 0;
+  function dispatchStat(type) {
+    const now = originalDateNow();
+    if (now - lastStatAt < STAT_THROTTLE_MS) return;
+    lastStatAt = now;
+    window.dispatchEvent(new CustomEvent("__HURRY_UP_STAT__", { detail: { type } }));
+  }
 
   // Clock Warping: Date.now()
   // Sites like my-subs.co check: end = Date.now() + SECONDS*1000; (Date.now() >= end)
@@ -83,20 +112,19 @@
   cloak(patchedPerformanceNow, "now");
   performance.now = patchedPerformanceNow;
 
-  // Fast-forward the virtual clock by 60 seconds immediately on load
-  // and step it periodically
-  fastForwardDeltaMs = 60000;
+  // The virtual clock starts at zero skew and is only advanced by solvePageCountdown()
+  // while a confirmed gate is on screen, so a page we never armed sees native time.
 
   // Overridden window.setTimeout
   const patchedSetTimeout = function (handler, timeout, ...args) {
     let delay = Number(timeout) || 0;
 
     if (state.enabled && state.speedUpTimers && delay >= state.minDelayMs && delay <= state.maxDelayMs) {
-      window.dispatchEvent(new CustomEvent("__HURRY_UP_STAT__", { detail: { type: "timer" } }));
+      dispatchStat("timer");
       if (state.mode === "instant") {
-        delay = 0;
+        delay = INSTANT_FLOOR_MS;
       } else {
-        delay = Math.max(0, Math.floor(delay / state.speedMultiplier));
+        delay = Math.max(INSTANT_FLOOR_MS, Math.floor(delay / state.speedMultiplier));
       }
     }
 
@@ -110,18 +138,14 @@
     let interval = Number(timeout) || 0;
 
     if (state.enabled && state.speedUpTimers && interval >= state.minDelayMs && interval <= state.maxDelayMs) {
-      window.dispatchEvent(new CustomEvent("__HURRY_UP_STAT__", { detail: { type: "timer" } }));
-      
+      dispatchStat("timer");
+
       if (state.mode === "instant") {
-        if (typeof handler === "function") {
-          try {
-            handler();
-            handler();
-          } catch (e) {}
-        }
-        interval = 15;
+        // A 25ms tick still finishes a 30s countdown in well under a second, without
+        // the double-firing (or 0ms hot loop) the old implementation produced.
+        interval = INSTANT_FLOOR_MS;
       } else {
-        interval = Math.max(20, Math.floor(interval / state.speedMultiplier));
+        interval = Math.max(INSTANT_FLOOR_MS, Math.floor(interval / state.speedMultiplier));
       }
     }
 
@@ -130,16 +154,11 @@
   cloak(patchedSetInterval, "setInterval");
   window.setInterval = patchedSetInterval;
 
-  // Accelerated requestAnimationFrame:
-  // Immediately fires ticks so rAF-driven countdown loops complete instantly
-  const patchedRequestAnimationFrame = function (callback) {
-    if (state.enabled && state.speedUpTimers) {
-      fastForwardDeltaMs += 10000; // Warp clock ahead by 10s per rAF tick
-    }
-    return originalRequestAnimationFrame.call(this, callback);
-  };
-  cloak(patchedRequestAnimationFrame, "requestAnimationFrame");
-  window.requestAnimationFrame = patchedRequestAnimationFrame;
+  // requestAnimationFrame is deliberately NOT patched: warping the clock on every
+  // frame (the old code added 10s per tick) desynchronises every animation,
+  // scheduler, and video pipeline on the page. rAF-driven countdowns read
+  // Date.now()/performance.now() inside their callback, so advancing the virtual
+  // clock in solvePageCountdown() still resolves them.
 
   // Network Hook: window.fetch
   if (originalFetch) {
@@ -157,7 +176,7 @@
         );
 
         if (matchesPattern) {
-          window.dispatchEvent(new CustomEvent("__HURRY_UP_STAT__", { detail: { type: "network" } }));
+          dispatchStat("network");
         }
       }
       return originalFetch.apply(this, arguments);
@@ -179,7 +198,7 @@
           String(this.__hurry_up_url).toLowerCase().includes(p.toLowerCase())
         );
         if (matchesPattern) {
-          window.dispatchEvent(new CustomEvent("__HURRY_UP_STAT__", { detail: { type: "network" } }));
+          dispatchStat("network");
         }
       }
       return originalXhrSend.apply(this, arguments);
@@ -187,12 +206,16 @@
   }
 
   // Comprehensive Proactive Page Solver (runs in page execution world)
+  // Only ever runs while `state.enabled` is true, i.e. after the content script
+  // confirmed this page is a countdown gate.
   function solvePageCountdown() {
-    if (!state.enabled) return;
+    if (!state.enabled || !state.speedUpTimers) return;
 
     try {
-      // 1. Advance fast forward clock
-      fastForwardDeltaMs += 5000;
+      // 1. Advance the virtual clock by one bounded step. A site that computed its
+      //    deadline as `Date.now() + N*1000` is outrun within a fraction of a second,
+      //    and the skew can never exceed MAX_CLOCK_SKEW_MS.
+      fastForwardDeltaMs = Math.min(fastForwardDeltaMs + CLOCK_STEP_MS, MAX_CLOCK_SKEW_MS);
 
       // 2. Extract REAL_URL if embedded in page scripts (e.g. my-subs.co)
       let foundRealUrl = null;
@@ -239,19 +262,25 @@
     }
   }
 
-  // Run solver immediately and at intervals during loading
-  solvePageCountdown();
-  const pollInterval = originalSetInterval(solvePageCountdown, 50);
+  // The solver is polled continuously but exits immediately unless the content
+  // script armed us, so an ordinary page pays nothing but a boolean check.
+  originalSetInterval(solvePageCountdown, POLL_INTERVAL_MS);
 
-  window.addEventListener("DOMContentLoaded", () => {
-    solvePageCountdown();
-    originalSetTimeout(() => originalClearInterval(pollInterval), 4000);
-  });
+  window.addEventListener("DOMContentLoaded", solvePageCountdown);
 
   // Listen for config sync from content script
   window.addEventListener("__HURRY_UP_CONFIG_SYNC__", (e) => {
-    if (e.detail && typeof e.detail === "object") {
-      Object.assign(state, e.detail);
+    if (!e.detail || typeof e.detail !== "object") return;
+
+    const wasEnabled = state.enabled;
+    Object.assign(state, e.detail);
+
+    if (!wasEnabled && state.enabled) {
+      // This page has just been confirmed as a countdown gate. Jump the virtual clock
+      // once so a deadline the site already computed counts as elapsed, then let the
+      // poll keep nudging it forward.
+      fastForwardDeltaMs = Math.min(Math.max(fastForwardDeltaMs, INITIAL_SKEW_MS), MAX_CLOCK_SKEW_MS);
+      solvePageCountdown();
     }
   });
 
