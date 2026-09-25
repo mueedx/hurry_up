@@ -1,335 +1,136 @@
-# ⚡ Hurry Up! — Countdown Timer Skipper & Fast Downloader
+# Hurry Up! — Countdown Timer Skipper & Fast Downloader
 
-A zero-dependency Google Chrome / Chromium extension (**Manifest V3**) that skips
-countdown timers on download-gate pages: it accelerates client-side timers, suppresses
-"please wait" overlays, and — only when you opt in — clicks the download button the
-page finally reveals.
+A zero-dependency Manifest V3 Chrome extension that speeds up countdown timers on download-gate pages, hides the "please wait" overlay, and optionally clicks the button the page reveals.
 
-- **Privacy:** no data collection, no telemetry, no network requests of its own — details in [PRIVACY.md](PRIVACY.md)
-- **Permissions:** `storage` + `activeTab` only (no host permissions, no `downloads`, no `webRequest`)
-- **Off by default everywhere:** the extension is dormant on every site until you flip its
-  switch **on for that site** with the toolbar popup (opt-in allowlist, no blanket access)
-- **Auto-clicking:** **off by default**, opt-in, and limited to pages that look like a real countdown gate
-- **Timer patching:** also gate-scoped — on ordinary sites the injector is a pass-through and timers stay native
-- **Dependencies:** none — no build step, no bundler, no remote code (MV3 compliant)
-- **Tests:** `node test/content-guards.test.js` and `node test/injected-guards.test.js` (no dependencies)
-- **License:** [MIT](LICENSE)
+No data collection, no telemetry, no network requests of its own. See [PRIVACY.md](PRIVACY.md).
 
----
+Permissions are `storage` and `activeTab` only. No build step, no bundler, no remote code. MIT licensed.
 
-## Safety first: what Hurry Up! will not do
+## Install
 
-Page-mutating automation is the risky part of an extension like this, so the behaviour is
-deliberately conservative:
+Open `chrome://extensions/`, enable developer mode, and click "Load unpacked" with this folder selected. Enable "Allow access to file URLs" on the Details page if you want to run the test bench over `file://`.
 
-1. **No clicking on ordinary pages.** Auto-clicking only runs when the page shows a real
-   countdown-gate signal (a countdown readout, a "please wait"/"your download will begin"
-   message, or a gate container). A chat app, dashboard, code viewer, or document viewer
-   that happens to contain a button labelled *Download* is ignored.
-2. **Nothing is force-opened to be clicked.** Hidden, `disabled`, `aria-disabled`,
-   `aria-hidden`, or `display:none` controls — including collapsed app action menus — are
-   never revealed by the auto-clicker. If the page has not enabled the button, Hurry Up!
-   waits.
-3. **A click only happens on a genuinely visible, enabled, in-layout control** that matches
-   one of your keywords, is not inside an ad wrapper, and is not inside a long block of page
-   copy (`> 64` characters is treated as text, not a button label).
-4. **Off by default — your opt-in decides where it runs.** The extension starts **off on
-   every site** (empty allowlist). It only runs where you flipped the popup switch on for
-   that domain; the global switch and every feature switch are still honoured there, and
-   everywhere else the badge shows `OFF`.
-5. **No timer patching on pages that are not a gate.** `setTimeout`, `setInterval` and the
-   virtual clock are only rewritten once a page passes the countdown-gate heuristic. Video
-   players, chat apps, dashboards, and single-page apps therefore run with completely native
-   timing — nothing is collapsed to `0 ms`, no clock skew is applied, and
-   `requestAnimationFrame` is never touched.
-6. **No overlay hiding by name alone.** A `.timer`, `#countdown` or `[class*='countdown']`
-   container is only hidden when its own text is genuinely a countdown / wait readout, so
-   unrelated UI (e.g. a video player timecode or a premiere banner) is left alone.
-7. **No data leaves your browser.** See [PRIVACY.md](PRIVACY.md).
+## Use
 
-If you ever see Hurry Up! click something on a site that is *not* a countdown gate, that is
-a bug worth reporting immediately — see [CONTRIBUTING.md](CONTRIBUTING.md).
+The extension is off on every site when you install it, so the badge reads `OFF` until you act.
 
----
+On a download-gate page, click the toolbar icon and flip the site switch on, then reload the tab. Settings are read at `document_start`, so a reload is required.
+
+The countdown speeds up and the overlay disappears. Auto-Click is a separate opt-in in the popup. Flip the site switch off again to make the extension dormant there.
+
+## What it will not do
+
+Auto-clicking needs a gate signal: a countdown readout, a "please wait" message, or a gate container. A dashboard with a *Download* button is ignored.
+
+Hidden, `disabled`, `aria-hidden`, and `display:none` controls are never revealed in order to be clicked. A click needs a visible, enabled, in-layout control matching your keywords, outside ad wrappers, and not inside a block of page copy over 64 characters.
+
+Timers are only patched after a page passes the gate heuristic. On ordinary sites nothing collapses to `0 ms`, no clock skew is applied, and `requestAnimationFrame` is never touched.
+
+Overlays are hidden only when their own text reads as a countdown, never from a class name alone, so a video timecode or premiere banner survives.
+
+Clicking something on a non-gate page is a bug. Report it in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Features
 
-1. **JavaScript timer interception (MAIN-world injection)**
-   - Hooks native `setTimeout`, `setInterval`, and the page's virtual clock at
-     `document_start`, before page scripts run — **but only acts on a confirmed gate.**
-   - The content script confirms a gate by name (`#gateMsg`, `#gateProg`, a please-wait
-     modal), by gate/countdown text on a gate element, or by a wait word next to a numeric
-     countdown *plus* a download word in the page text. Until then every patch is a
-     pass-through. Arming latency after load is ~1 s, and the arm is re-checked on DOM
-     changes, on load, and on click (capture phase) so gates built after a click are covered.
-   - Two bypass strategies: **Instant** (collapse long waits to a 25 ms tick) or
-     **Accelerated** (divide by the multiplier). Nothing is ever rewritten to `0 ms`, which
-     used to turn countdowns into CPU hot loops.
-   - The virtual clock starts at zero skew, jumps once when a gate is confirmed, grows in
-     bounded steps while the gate is on screen, and is hard-capped at 15 minutes.
-   - `requestAnimationFrame` is **never** patched — warping the clock per frame desynchronises
-     schedulers and video pipelines (that behaviour broke video sites).
-   - Delay-window boundaries (`minDelayMs` 500 ms – `maxDelayMs` 60 000 ms) keep UI
-     animations, carousels, and tooltips from being destroyed.
-   - Optional function cloaking so `.toString()` checks still report native code.
-   - Timer stats are throttled to one report every 2 s, so a fast-forwarded gate cannot
-     storm `chrome.storage`.
-
-2. **Network hook (delayed download endpoints)**
-   - Wraps `fetch` and `XMLHttpRequest` in the page to observe delayed download/token
-     endpoints (`get_link`, `generate_link`, `ajax/verify`, `token`, …). Requests are never
-     modified, blocked, or redirected — only observed and counted locally.
-
-3. **Overlay and modal suppression**
-   - A `MutationObserver` finds countdown backdrops, "please wait" modals, and artificial
-     progress bars and hides them with an extension-namespaced class
-     (`hurry-up-hidden-overlay`), and restores document scrolling when a gate locked it.
-
-4. **Safe auto-clicking (opt-in)**
-   - Off by default. Once enabled it clicks the first download-intent control that is really
-     visible, enabled, and matched against your keyword list, after a configurable settling
-     delay so the page's own click listeners are bound.
-   - Anti-ad safeguard skips elements inside ad wrappers, sponsored blocks, and iframes.
-
-5. **Per-site enable toggle (popup)**
-   - Off on every site by default. Shows the current domain with a one-click switch to run
-     Hurry Up! there, plus quick switches for global protection, timer skipping, and
-     auto-clicking, and local counters.
-   - The toolbar badge shows green `ON` where you enabled it and red `OFF` everywhere else.
-
-6. **Full-page options dashboard**
-   - **Timers & Speed Hack:** global switch, timer bypass, mode, multiplier, delay window,
-     cloaking.
-   - **Network Interceptor:** fetch/XHR hooking and watched API patterns.
-   - **Enabled Websites:** the opt-in allowlist — search, add, and remove domains.
-   - **Overlays & Auto-Click:** overlay selectors, auto-click opt-in, gate-only safety mode,
-     anti-ad filter, keywords, settling delay.
-   - **Backup & Restore:** JSON export, schema-validated import, factory reset.
-
----
-
-## Installation (developer mode)
-
-1. Open Chrome or any Chromium-based browser (Edge, Brave, Chromium).
-2. Go to `chrome://extensions/`.
-3. Enable **Developer mode** (top right).
-4. Click **Load unpacked** and select this repository folder.
-5. Optional: on the extension's **Details** page enable **Allow access to file URLs** if you
-   want to test the local harness from `file://`.
-
----
-
-## Usage
-
-1. The extension is **off on every site by default**. On a download-gate page, click the
-   toolbar icon and flip the site switch **on** — the badge turns green `ON` — then reload
-   the tab (settings are read at `document_start`).
-2. The countdown speeds up and the "please wait" overlay disappears.
-3. If you want the download button clicked for you, enable **Auto-Click** in the popup —
-   it is off by default.
-4. To stop using Hurry Up! on a site, flip the site switch off again (or remove it under
-   **Enabled Websites** in the options dashboard); it stays dormant there until you
-   re-enable it.
-
----
+- Timers. Hooks `setTimeout`, `setInterval`, and the virtual clock at `document_start`, once a gate is confirmed by name, by gate text, or by a wait word beside a numeric countdown. Instant mode collapses long waits to a 25 ms tick, accelerated divides by the multiplier, and nothing is ever set to `0 ms`. Clock skew is capped at 15 minutes. `requestAnimationFrame` is left alone. The delay window runs 500 ms to 60,000 ms so animations and tooltips survive. Optional function cloaking passes `.toString()` checks. Stats report at most once every two seconds.
+- Network. Wraps `fetch` and `XMLHttpRequest` to count calls to endpoints like `get_link`, `generate_link`, and `token`. Requests are observed, never modified or blocked.
+- Overlays. A `MutationObserver` hides countdown backdrops and "please wait" modals via `hurry-up-hidden-overlay`, and restores scrolling when a gate locked it.
+- Auto-click. Opt-in. Clicks the first download-intent control that is visible, enabled, and keyword-matched, after a settling delay so page listeners are bound. Skips ad wrappers and iframes.
+- Popup. One-click per-site switch, quick toggles, and local counters. Badge is green `ON` on enabled sites and red `OFF` elsewhere.
+- Options. Tabs for timers, network patterns, the enabled-sites allowlist, overlay selectors and keywords, and JSON export/import with factory reset.
 
 ## Settings reference
 
-All defaults come from `src/storage.js` and are validated on every read/write
-(`validateSettings`).
+Defaults live in `src/storage.js` and are validated on every read and write.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| `globalEnabled` | `true` | Master switch for the whole extension. |
-| `enabledDomains` | `[]` | **Opt-in allowlist** — the extension is off on every site that is not listed here; the popup toggle and the **Enabled Websites** tab manage it (legacy `disabledDomains` data is dropped on import). |
-| `timerSettings.speedUpTimers` | `true` | Hook `setTimeout`/`setInterval` + the virtual clock, on confirmed gate pages only. |
-| `timerSettings.mode` | `"instant"` | `"instant"` (collapse long waits to a 25 ms tick) or `"accelerated"` (÷ multiplier). |
-| `timerSettings.speedMultiplier` | `50` | Used when mode is `"accelerated"`. |
-| `timerSettings.minDelayMs` / `maxDelayMs` | `500` / `60000` | Only delays inside this window are accelerated (still never below 25 ms). |
+| `globalEnabled` | `true` | Master switch. |
+| `enabledDomains` | `[]` | Opt-in allowlist. The extension is off on any site not listed. Legacy `disabledDomains` data is dropped on import. |
+| `timerSettings.speedUpTimers` | `true` | Patch timers on confirmed gate pages only. |
+| `timerSettings.mode` | `"instant"` | `"instant"` collapses waits to 25 ms, `"accelerated"` divides by the multiplier. |
+| `timerSettings.speedMultiplier` | `50` | Used in `"accelerated"` mode. |
+| `timerSettings.minDelayMs` / `maxDelayMs` | `500` / `60000` | Only delays in this window are accelerated, never below 25 ms. |
 | `timerSettings.cloakFunctions` | `true` | Mask patched functions from `.toString()`. |
-| `networkSettings.interceptFetchXhr` | `true` | Observe (never modify) fetch/XHR calls. |
-| `networkSettings.customApiPatterns` | `get_link`, `generate_link`, `token`, `ajax/verify`, … | Substring patterns counted against watched endpoints. |
-| `overlaySettings.hideOverlays` | `true` | Hide countdown overlays that match the selector list *and* contain real gate text. |
-| `overlaySettings.customSelectors` | countdown / timer / `#gateMsg` / `#gateProg` selectors | One selector per line. |
-| `autoClickSettings.autoClick` | **`false`** | Opt-in; nothing is ever clicked until you enable it. |
-| `autoClickSettings.gateDetection` | `true` | Gate heuristic for unlocking/clicking **and** for arming timer acceleration. Leave on. |
-| `autoClickSettings.customKeywords` | `download`, `get link`, `direct download`, `skip wait`, `click here to download` | Matched against short button labels only. |
+| `networkSettings.interceptFetchXhr` | `true` | Observe fetch and XHR. |
+| `networkSettings.customApiPatterns` | `get_link`, `generate_link`, `token`, `ajax/verify` | Substrings matched against endpoints. |
+| `overlaySettings.hideOverlays` | `true` | Hide overlays matching the selector list and containing real gate text. |
+| `overlaySettings.customSelectors` | countdown / timer / `#gateMsg` / `#gateProg` | One per line. |
+| `autoClickSettings.autoClick` | `false` | Opt-in. Nothing is clicked until you enable it. |
+| `autoClickSettings.gateDetection` | `true` | Gate heuristic for clicking and for arming timers. Leave on. |
+| `autoClickSettings.customKeywords` | `download`, `get link`, `direct download`, `skip wait`, … | Matched against short button labels only. |
 | `autoClickSettings.delayBeforeClickMs` | `250` | Settling delay before the click. |
-| `autoClickSettings.antiAdFilter` | `true` | Skip ad wrappers, sponsored blocks, iframes. |
-| `stats.*` | `0` | Local counters only (timers skipped, requests accelerated, buttons clicked). |
+| `autoClickSettings.antiAdFilter` | `true` | Skip ad wrappers and iframes. |
+| `stats.*` | `0` | Local counters only. |
 
-Exported backups are validated on import: unknown keys are dropped and invalid values fall
-back to defaults instead of being written through.
-
----
+Exported backups are validated on import. Unknown keys are dropped and invalid values fall back to defaults.
 
 ## Testing
 
-### Automated guard regression tests (no dependencies)
-
 ```bash
-node test/content-guards.test.js   # content script: gate detection, unlock, auto-click
-node test/injected-guards.test.js  # MAIN-world injector: timer arming, skew, stat throttle
+node test/content-guards.test.js   # content script: gate detection, auto-click
+node test/injected-guards.test.js  # injector: timer arming, skew, stat throttle
 ```
 
-`content-guards.test.js` runs `src/content.js` inside a minimal in-repo DOM sandbox and verifies:
+Both run under plain Node with no dependencies and print `ALL CHECKS PASSED`. The first runs `src/content.js` in a DOM sandbox and asserts that ordinary pages are never mutated or clicked, hidden controls are never revealed to be clicked, real gates still click exactly once, the empty default leaves every site untouched, and video timecodes are never hidden. The second runs `src/injected.js` in a fake-timer sandbox and asserts that nothing is patched before a gate is confirmed, waits never collapse to `0 ms`, clock skew is capped at 15 minutes, animation frames never warp the clock, and stats are throttled.
 
-- an ordinary page (hidden export menu, locked `#dlBtn`, visible `Download` button) is never
-  mutated or clicked,
-- a hidden control is never force-unlocked in order to be clicked,
-- a real countdown gate page still unlocks and auto-clicks its button exactly once,
-- auto-clicking stays inert while the opt-in setting is off,
-- the shipped default (empty `enabledDomains`) leaves every site — even a real gate page —
-  completely untouched, and flipping the per-site switch makes gate handling work,
-- ordinary, busy client-rendered and "please wait" spinner pages never arm the timer
-  patching, while real gates (and the explicit gate-detection opt-out) do,
-- video-player timecodes and premiere countdown containers are never hidden.
-
-`injected-guards.test.js` runs `src/injected.js` in a fake-timer/clock sandbox and verifies:
-
-- before a gate is confirmed, `setTimeout`, `setInterval`, the clock, and
-  `requestAnimationFrame` are all untouched,
-- an armed gate collapses long waits but never to `0 ms`,
-- clock skew starts at 0, grows only while armed, and is capped at 15 minutes,
-- animation frames never warp the clock,
-- stat reporting is throttled (≤ 1 event per 2 s).
-
-Both accept an override for negative testing, e.g.
-`HURRY_UP_INJECTED_SCRIPT=/tmp/old-injected.js node test/injected-guards.test.js`.
-
-### Manual browser test bench
-
-Open `test/mock-timer-page.html` (enable **Allow access to file URLs** if you load it via
-`file://`), then **flip the site switch on in the popup** — the extension is off on every
-site (including local files) until you do, and settings are read at `document_start`, so
-reload the page after switching:
-
-| Test | What it verifies |
-| --- | --- |
-| 1 – Trigger 10s Timer | `setTimeout(..., 10000)` gate resolves immediately; the revealed button is clicked (if auto-click is on). |
-| 2 – Start Interval Ticker | `setInterval(..., 1000)` ticking countdown is accelerated. |
-| 3 – Blocking Overlay | The "please wait" modal is suppressed. |
-| 4 – Fetch Download Token | Watched endpoint `/api/generate_link` is observed and counted. |
-| 5 – Closed Download Menu | **Regression guard:** a collapsed menu containing *Download chat transcript* must stay hidden and unclicked. |
-
-Enable **Auto-Click** in the popup before running Tests 1–3, and reload the page after
-changing settings — content scripts read settings at `document_start`.
-
----
+For manual checks, open `test/mock-timer-page.html` and switch the site on in the popup. It covers a 10s `setTimeout` gate, a ticking `setInterval` countdown, a blocking modal, a watched `/api/generate_link` fetch, and a closed menu containing *Download chat transcript* that must stay hidden and unclicked. Enable Auto-Click before the first three and reload after changing settings.
 
 ## Project layout
 
 ```text
 manifest.json                 MV3 manifest: permissions, content scripts, popup, options
-src/injected.js               MAIN world: setTimeout/setInterval/rAF/fetch/XHR hooks
+src/injected.js               MAIN world: setTimeout, setInterval, rAF, fetch, XHR hooks
 src/storage.js                Defaults, schema validation, get/save, per-site allowlist
-src/content.js                ISOLATED world: gate detection, overlays, safe unlock/auto-click
-src/content.css               Extension-namespaced overlay/highlight styles
+src/content.js                ISOLATED world: gate detection, overlays, safe auto-click
+src/content.css               Extension-namespaced overlay and highlight styles
 src/background.js             Service worker: badge state
 src/popup.html / .css / .js   Quick toggles and counters
-src/options.html / .css / .js Full dashboard (tabs, enabled sites, import/export)
-test/mock-timer-page.html     Manual browser test bench
-test/content-guards.test.js   Automated guard regression tests (Node only)
-specs/001-timer-skipper/      Feature spec, plan, tasks
+src/options.html / .css / .js Full dashboard
+test/                         Manual bench and guard regression tests
+specs/001-timer-skipper/      Feature spec, plan, tasks, and store listing copy
 ```
-
----
 
 ## Privacy
 
-Hurry Up! collects nothing and sends nothing. There is no server, no analytics, no
-third-party code, and no remote resource loading. Settings live in `chrome.storage` (your
-browser profile; Chrome may sync them between your own signed-in profiles), and page
-content is processed locally, in memory, only.
-
-Read the full disclosure: [PRIVACY.md](PRIVACY.md).
+Nothing is collected and nothing is sent. There is no server, no analytics, and no third-party code. Settings live in `chrome.storage` in your own profile, and Chrome may sync them between your signed-in profiles. Page content is processed in memory only. Full disclosure in [PRIVACY.md](PRIVACY.md).
 
 | Permission | Reason |
 | --- | --- |
-| `storage` | Save your settings and the list of enabled websites in your browser profile. |
-| `activeTab` | Apply changes to the tab you are actively using. |
-| Content script on `<all_urls>` | Countdown gates exist on many domains, so the timer/DOM logic must be able to run wherever you browse — but it does nothing until you switch the extension on for that site (opt-in) and only acts on confirmed gate pages. |
+| `storage` | Save settings and the enabled-sites list. |
+| `activeTab` | Apply changes to the tab you are viewing. |
+| Content script on `<all_urls>` | Gates appear on many domains, so the logic must run wherever you browse. It does nothing until you enable the site. |
 
----
+## Publishing
 
-## Publishing to the Chrome Web Store
+Listing copy, permission justifications, data-use answers, the screenshot shot list, and reviewer notes are all drafted in `specs/001-timer-skipper/store-listing.md`.
 
-Submission checklist for this repository:
-
-- [x] **Manifest V3** with a service worker (`src/background.js`).
-- [x] **Remote code:** none — no `eval`, no `new Function`, no remote scripts.
-- [x] **Minimal permissions:** `storage` + `activeTab`, with content scripts declared in the
-      manifest (no optional host-permission escalation).
-- [x] **Single purpose:** *"Skip countdown waits on download-gate pages."*
-- [x] **Privacy policy URL:** required because the extension reads page data — publish
-      `PRIVACY.md` (GitHub Pages, or the repository permalink) and paste the URL in the listing.
-- [x] **Data-use disclosure:** no data collected, nothing sold, nothing transferred to third parties.
-- [x] **In-repo test evidence** for reviewers: `test/content-guards.test.js` and
-      `test/injected-guards.test.js`, plus the manual test bench.
-- [ ] **Screenshots:** at least one at **1280×800** (max 5). Shot list in
-      [`specs/001-timer-skipper/store-listing.md`](specs/001-timer-skipper/store-listing.md) §5:
-      popup with the per-site toggle, options "Timers & Speed Hack", options "Overlays & Auto-Click".
-- [x] **Store icon:** `icons/icon128.png` verified 128×128 RGBA (`icon16`/`icon48` also present);
-      440×280 promo tile optional.
-- [ ] **Packaging:** zip only the runtime files — `manifest.json`, `icons/`, `src/`. Exclude
-      `test/`, `specs/`, `.git/`, `*.md`, and any `.zip` (see `.gitignore`).
+Before uploading: publish `PRIVACY.md` at a public URL, capture at least one 1280 by 800 screenshot, and bump `version` in `manifest.json` if 1.0.0 has shipped anywhere. Then package only the runtime files and confirm the archive holds exactly `manifest.json`, `icons/*`, and `src/*`.
 
 ```bash
-# From the repository root, build a store-ready archive:
-zip -r hurry-up-1.0.0.zip manifest.json icons src -x "*.DS_Store"
+node test/content-guards.test.js
+node test/injected-guards.test.js
+for f in src/*.js test/*.js; do node --check "$f"; done
+zip -r hurry-up-<version>.zip manifest.json icons src -x "*.DS_Store"
 ```
-
-- [ ] **Permission justifications** to paste into the listing — drafted ready-to-paste,
-      together with the listing copy, screenshot shot list, and reviewer notes, in
-      [`specs/001-timer-skipper/store-listing.md`](specs/001-timer-skipper/store-listing.md) §3:
-  - `storage` — persists user settings and the per-site enabled-domain list locally.
-  - `activeTab` — applies the user's chosen action to the active tab.
-  - Content script injection — required to neutralise in-page countdown timers on the
-    websites the user visits; it does not read, collect, or transmit page data.
-- [ ] **Version bump** in `manifest.json` before each upload (current: `1.0.0`).
-- [ ] **Reviewer note:** auto-clicking is disabled by default, no login or account is required,
-      and countdown behaviour can be verified with the included test harness (ready-to-paste
-      text in [`store-listing.md`](specs/001-timer-skipper/store-listing.md) §7).
-
----
 
 ## Troubleshooting
 
 | Symptom | Fix |
 | --- | --- |
-| Nothing happens on a site | The extension is off on every site by default — turn it **on for that site** with the popup toggle (or under **Enabled Websites**), keep the global switch on, then reload the tab (settings are read at `document_start`). |
-| A timer is skipped but the button is not clicked | Auto-clicking is off by default — enable **Auto-Click** in the popup. |
-| A timer on a site I want skipped is not accelerated | The page did not look like a gate. Turn off **Only Act On Countdown Gate Pages** for that site (it also arms timer acceleration everywhere), then reload and report the URL so the heuristic can be extended safely. |
-| A countdown is shorter than expected, or timers feel odd on a site | Turn off **Skip JavaScript Timers**, or flip that domain's popup switch off — the injector stays a pass-through whenever gate detection has not confirmed a gate. |
-| A gated page is not detected | Temporarily turn off **Only Act On Countdown Gate Pages** for that site and open an issue with the URL so the heuristic can be extended safely. |
-| A site breaks (layout, modal, script error) | Disable the extension for that domain with the popup toggle and open an issue. Report the URL — non-gate breakage is treated as a bug, not a configuration issue. |
-| Settings did not apply | Reload the tab after saving; content scripts do not hot-reload. |
-
----
+| Nothing happens on a site | It is off everywhere by default. Switch it on for that site, keep the global switch on, reload. |
+| Timer skipped but no click | Auto-Click is off by default. Enable it in the popup. |
+| A gate is not detected or not accelerated | Turn off "Only Act On Countdown Gate Pages" for that site, reload, and open an issue with the URL. |
+| Timers feel odd on a site | Turn off "Skip JavaScript Timers" or flip that domain's popup switch off. The injector is a pass-through until a gate is confirmed. |
+| A site breaks | Disable the extension for that domain and open an issue. Non-gate breakage is treated as a bug. |
+| Settings did not apply | Reload the tab. Content scripts do not hot-reload. |
 
 ## Contributing
 
-Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the project layout,
-coding conventions, and the privacy / no-dependency rules.
-
-```bash
-node test/content-guards.test.js                          # content-script guard regression tests
-node test/injected-guards.test.js                         # injector arming / clock regression tests
-for f in src/*.js test/*.js; do node --check "$f"; done    # syntax check
-```
-
----
+See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and the privacy and no-dependency rules.
 
 ## License
 
 [MIT](LICENSE) © 2026 Mueed Mubashar.
 
-## Disclaimer
-
-Hurry Up! is intended for legitimate use: skipping artificial wait timers on pages you are
-permitted to access. It does not bypass paywalls, authentication, DRM, or server-side
-entitlement checks — it only accelerates client-side timing delays that run in your own
-browser. Using it may violate the terms of service of some websites, and you are responsible
-for how you use it. The software is provided "as is", without warranty of any kind, as set out
-in the [MIT License](LICENSE).
-
+Intended for skipping artificial wait timers on pages you are permitted to access. It does not bypass paywalls, authentication, DRM, or server-side entitlement checks. Using it may violate some sites' terms of service, and you are responsible for how you use it. Provided as is, without warranty of any kind.
