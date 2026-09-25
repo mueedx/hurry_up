@@ -32,10 +32,14 @@ Users visiting download, file-sharing, content, or verification portals frequent
 ### 3.1 Timing Interception & Acceleration
 - **FR-1.1**: Intercept native `window.setTimeout` and `window.setInterval` before host page scripts run.
 - **FR-1.2**: Support two configurable bypass modes:
-  - *Instant Mode*: Coerces qualifying countdown delays directly to `0ms`.
+  - *Instant Mode*: Collapses qualifying countdown delays to a small non-zero floor (`25ms`) so the callback still yields to the event loop. Delays are never rewritten to `0ms`, which would turn a countdown into a CPU-bound reschedule loop.
   - *Accelerated Mode*: Multiplies the tick rate (e.g., 20x, 50x, 100x speed) for pages that require UI frames to count down step-by-step.
 - **FR-1.3**: Filter delays with minimum (`minDelayMs`, default 500ms — low enough to catch 1-second ticking countdowns) and maximum (`maxDelayMs`, default 60000ms) thresholds to prevent breaking UI animations, carousels, or tooltip timeouts.
 - **FR-1.4**: Mask/cloak overridden functions so `.toString()` checks return native function signatures (`function setTimeout() { [native code] }`).
+- **FR-1.5 (gate-scoped arming)**: Timer interception is inert until the ISOLATED-world content script confirms a countdown gate (FR-4.4) and sends an enabled config. Before that — and on every failure of the gate probe — the MAIN-world patches must behave as pass-through wrappers: identical behaviour, no delay rewriting, no clock skew.
+- **FR-1.6 (no clock warping per frame)**: `requestAnimationFrame` must not be patched and the virtual clock must not advance per animation frame. Clock skew starts at `0`, is applied only while a gate is armed, advances in bounded steps, and is hard-capped (15 minutes) so schedulers, animation pipelines, and media players stay coherent.
+- **FR-1.7 (stat throttling)**: Timer/request counters must be reported to `chrome.storage` at a bounded rate (≤ 1 write per 2s) so an accelerated gate cannot produce a storage-write storm.
+- **FR-1.8 (overlay guard)**: A selector match alone is never sufficient to hide an element (FR-2.1); the element must additionally read as a gate (gate copy or a countdown readout) so unrelated UI such as a player timecode or a premiere banner is left visible.
 
 
 ### 3.2 DOM Overlay & Modal Suppression
@@ -51,7 +55,7 @@ Users visiting download, file-sharing, content, or verification portals frequent
 - **FR-4.1**: Detect target download links or action buttons by matching text keywords ("Download", "Get Link", "Direct Download", "Skip Wait") against the control's *visible label only*, and only when that label is a short action label (≤ 64 characters) so page copy that merely contains a keyword is never clicked.
 - **FR-4.2**: Prevent false clicks on ad frames, sponsored links, or elements inside known ad containers (`ins.adsbygoogle`, ad-wrapper classes).
 - **FR-4.3**: Provide a configurable settling delay before triggering the click to ensure DOM event handlers have attached, and re-verify that the control is still clickable at click time.
-- **FR-4.4 (gate detection)**: Auto-clicking and download-button unlocking must only run on a page that exhibits a countdown-gate signal: a gate container (`#gateMsg`, `#gateProg`, `#dlBtn`, `#downloadBtn`, countdown/wait-overlay selectors) whose text matches a wait-gate phrase ("please wait", "your download will begin", "generating link") or a countdown readout (bare number, `mm:ss`, "12 seconds"). This is the guard that stops the extension from acting on ordinary pages such as chat apps, dashboards, or document viewers.
+- **FR-4.4 (gate detection)**: Auto-clicking, download-button unlocking, **and timer acceleration (FR-1.5)** must only run on a page that exhibits a countdown-gate signal: a gate container (`#gateMsg`, `#gateProg`, `#dlBtn`, `#downloadBtn`, countdown/wait-overlay selectors) whose text matches a wait-gate phrase ("please wait", "your download will begin", "generating link") or a countdown readout (bare number, `mm:ss`, "12 seconds"). A wait phrase adjacent to a numeric countdown also qualifies when a download word is present elsewhere in the page text. A bare duration, timecode, or video timestamp never qualifies on its own. This is the guard that stops the extension from acting on ordinary pages such as chat apps, dashboards, video sites, or document viewers.
 - **FR-4.5 (never force-open)**: A control that is `disabled`, `aria-disabled`, `aria-hidden`, hidden by attribute, or `display:none` must never be revealed in order to be clicked. Unlocking only applies to explicitly download-intent controls on a detected gate page.
 - **FR-4.6 (opt-in)**: Auto-clicking defaults to `false`; the extension must not click anything on any page until the user enables it in the popup or options dashboard.
 
@@ -86,3 +90,4 @@ Users visiting download, file-sharing, content, or verification portals frequent
 5. **Per-Site Exclusion**: Disabling the extension on a site from the popup immediately halts bypass logic on that site and persists across reloads.
 6. **Settings Export/Import**: Exporting settings generates a valid `.json` file; modifying settings and re-importing the JSON restores configuration accurately.
 7. **Network Interceptor**: Delayed API calls in the test harness are matched and counted without being modified.
+8. **Gate-scoped timing (regression)**: On an ordinary, busy client-rendered page (video/dashboard/SPA-like content, ticking timecodes, "please wait" spinners without a gate) the injector must leave `setTimeout`, `setInterval`, `Date`/`performance.now`, and `requestAnimationFrame` untouched — verified by `node test/injected-guards.test.js` and by the timer-arming assertions in `test/content-guards.test.js`.

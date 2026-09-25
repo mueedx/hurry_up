@@ -8,8 +8,9 @@ page finally reveals.
 - **Privacy:** no data collection, no telemetry, no network requests of its own — details in [PRIVACY.md](PRIVACY.md)
 - **Permissions:** `storage` + `activeTab` only (no host permissions, no `downloads`, no `webRequest`)
 - **Auto-clicking:** **off by default**, opt-in, and limited to pages that look like a real countdown gate
+- **Timer patching:** also gate-scoped — on ordinary sites the injector is a pass-through and timers stay native
 - **Dependencies:** none — no build step, no bundler, no remote code (MV3 compliant)
-- **Tests:** `node test/content-guards.test.js` (no dependencies)
+- **Tests:** `node test/content-guards.test.js` and `node test/injected-guards.test.js` (no dependencies)
 - **License:** [MIT](LICENSE)
 
 ---
@@ -32,7 +33,15 @@ deliberately conservative:
    copy (`> 64` characters is treated as text, not a button label).
 4. **Your exclusions win.** The per-site toggle, the global switch, and every feature switch
    are honoured — an excluded domain is left completely untouched (badge shows `OFF`).
-5. **No data leaves your browser.** See [PRIVACY.md](PRIVACY.md).
+5. **No timer patching on pages that are not a gate.** `setTimeout`, `setInterval` and the
+   virtual clock are only rewritten once a page passes the countdown-gate heuristic. Video
+   players, chat apps, dashboards, and single-page apps therefore run with completely native
+   timing — nothing is collapsed to `0 ms`, no clock skew is applied, and
+   `requestAnimationFrame` is never touched.
+6. **No overlay hiding by name alone.** A `.timer`, `#countdown` or `[class*='countdown']`
+   container is only hidden when its own text is genuinely a countdown / wait readout, so
+   unrelated UI (e.g. a video player timecode or a premiere banner) is left alone.
+7. **No data leaves your browser.** See [PRIVACY.md](PRIVACY.md).
 
 If you ever see Hurry Up! click something on a site that is *not* a countdown gate, that is
 a bug worth reporting immediately — see [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -42,13 +51,25 @@ a bug worth reporting immediately — see [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Features
 
 1. **JavaScript timer interception (MAIN-world injection)**
-   - Hooks native `setTimeout`, `setInterval`, and `requestAnimationFrame` at
-     `document_start`, before page scripts run.
-   - Two bypass strategies: **Instant (0 ms)** or **Accelerated (multiplier)** for pages
-     that need their per-second UI renders.
+   - Hooks native `setTimeout`, `setInterval`, and the page's virtual clock at
+     `document_start`, before page scripts run — **but only acts on a confirmed gate.**
+   - The content script confirms a gate by name (`#gateMsg`, `#gateProg`, a please-wait
+     modal), by gate/countdown text on a gate element, or by a wait word next to a numeric
+     countdown *plus* a download word in the page text. Until then every patch is a
+     pass-through. Arming latency after load is ~1 s, and the arm is re-checked on DOM
+     changes, on load, and on click (capture phase) so gates built after a click are covered.
+   - Two bypass strategies: **Instant** (collapse long waits to a 25 ms tick) or
+     **Accelerated** (divide by the multiplier). Nothing is ever rewritten to `0 ms`, which
+     used to turn countdowns into CPU hot loops.
+   - The virtual clock starts at zero skew, jumps once when a gate is confirmed, grows in
+     bounded steps while the gate is on screen, and is hard-capped at 15 minutes.
+   - `requestAnimationFrame` is **never** patched — warping the clock per frame desynchronises
+     schedulers and video pipelines (that behaviour broke video sites).
    - Delay-window boundaries (`minDelayMs` 500 ms – `maxDelayMs` 60 000 ms) keep UI
      animations, carousels, and tooltips from being destroyed.
    - Optional function cloaking so `.toString()` checks still report native code.
+   - Timer stats are throttled to one report every 2 s, so a fast-forwarded gate cannot
+     storm `chrome.storage`.
 
 2. **Network hook (delayed download endpoints)**
    - Wraps `fetch` and `XMLHttpRequest` in the page to observe delayed download/token
@@ -113,17 +134,17 @@ All defaults come from `src/storage.js` and are validated on every read/write
 | --- | --- | --- |
 | `globalEnabled` | `true` | Master switch for the whole extension. |
 | `disabledDomains` | `[]` | Domains where the extension must not run (popup toggle). |
-| `timerSettings.speedUpTimers` | `true` | Hook `setTimeout`/`setInterval`/rAF. |
-| `timerSettings.mode` | `"instant"` | `"instant"` (0 ms) or `"accelerated"`. |
+| `timerSettings.speedUpTimers` | `true` | Hook `setTimeout`/`setInterval` + the virtual clock, on confirmed gate pages only. |
+| `timerSettings.mode` | `"instant"` | `"instant"` (collapse long waits to a 25 ms tick) or `"accelerated"` (÷ multiplier). |
 | `timerSettings.speedMultiplier` | `50` | Used when mode is `"accelerated"`. |
-| `timerSettings.minDelayMs` / `maxDelayMs` | `500` / `60000` | Only delays inside this window are accelerated. |
+| `timerSettings.minDelayMs` / `maxDelayMs` | `500` / `60000` | Only delays inside this window are accelerated (still never below 25 ms). |
 | `timerSettings.cloakFunctions` | `true` | Mask patched functions from `.toString()`. |
 | `networkSettings.interceptFetchXhr` | `true` | Observe (never modify) fetch/XHR calls. |
 | `networkSettings.customApiPatterns` | `get_link`, `generate_link`, `token`, `ajax/verify`, … | Substring patterns counted against watched endpoints. |
-| `overlaySettings.hideOverlays` | `true` | Hide countdown overlays that match the selector list. |
+| `overlaySettings.hideOverlays` | `true` | Hide countdown overlays that match the selector list *and* contain real gate text. |
 | `overlaySettings.customSelectors` | countdown / timer / `#gateMsg` / `#gateProg` selectors | One selector per line. |
 | `autoClickSettings.autoClick` | **`false`** | Opt-in; nothing is ever clicked until you enable it. |
-| `autoClickSettings.gateDetection` | `true` | Only unlock/click on pages that look like a countdown gate. Leave on. |
+| `autoClickSettings.gateDetection` | `true` | Gate heuristic for unlocking/clicking **and** for arming timer acceleration. Leave on. |
 | `autoClickSettings.customKeywords` | `download`, `get link`, `direct download`, `skip wait`, `click here to download` | Matched against short button labels only. |
 | `autoClickSettings.delayBeforeClickMs` | `250` | Settling delay before the click. |
 | `autoClickSettings.antiAdFilter` | `true` | Skip ad wrappers, sponsored blocks, iframes. |
@@ -139,16 +160,32 @@ back to defaults instead of being written through.
 ### Automated guard regression tests (no dependencies)
 
 ```bash
-node test/content-guards.test.js
+node test/content-guards.test.js   # content script: gate detection, unlock, auto-click
+node test/injected-guards.test.js  # MAIN-world injector: timer arming, skew, stat throttle
 ```
 
-This runs `src/content.js` inside a minimal in-repo DOM sandbox and verifies:
+`content-guards.test.js` runs `src/content.js` inside a minimal in-repo DOM sandbox and verifies:
 
 - an ordinary page (hidden export menu, locked `#dlBtn`, visible `Download` button) is never
   mutated or clicked,
 - a hidden control is never force-unlocked in order to be clicked,
 - a real countdown gate page still unlocks and auto-clicks its button exactly once,
-- auto-clicking stays inert while the opt-in setting is off.
+- auto-clicking stays inert while the opt-in setting is off,
+- ordinary, busy client-rendered and "please wait" spinner pages never arm the timer
+  patching, while real gates (and the explicit gate-detection opt-out) do,
+- video-player timecodes and premiere countdown containers are never hidden.
+
+`injected-guards.test.js` runs `src/injected.js` in a fake-timer/clock sandbox and verifies:
+
+- before a gate is confirmed, `setTimeout`, `setInterval`, the clock, and
+  `requestAnimationFrame` are all untouched,
+- an armed gate collapses long waits but never to `0 ms`,
+- clock skew starts at 0, grows only while armed, and is capped at 15 minutes,
+- animation frames never warp the clock,
+- stat reporting is throttled (≤ 1 event per 2 s).
+
+Both accept an override for negative testing, e.g.
+`HURRY_UP_INJECTED_SCRIPT=/tmp/old-injected.js node test/injected-guards.test.js`.
 
 ### Manual browser test bench
 
@@ -215,8 +252,8 @@ Submission checklist for this repository:
 - [x] **Privacy policy URL:** required because the extension reads page data — publish
       `PRIVACY.md` (GitHub Pages, or the repository permalink) and paste the URL in the listing.
 - [x] **Data-use disclosure:** no data collected, nothing sold, nothing transferred to third parties.
-- [x] **In-repo test evidence** for reviewers: `test/content-guards.test.js` plus the manual
-      test bench.
+- [x] **In-repo test evidence** for reviewers: `test/content-guards.test.js` and
+      `test/injected-guards.test.js`, plus the manual test bench.
 - [ ] **Screenshots:** at least one at **1280×800** (max 5). Suggested: popup with the per-site
       toggle, options "Timers & Speed Hack", options "Overlays & Auto-Click".
 - [ ] **Store icon:** 128×128 PNG (already in `icons/icon128.png`); 440×280 promo tile optional.
@@ -245,8 +282,10 @@ zip -r hurry-up-1.0.0.zip manifest.json icons src -x "*.DS_Store"
 | --- | --- |
 | Nothing happens on a site | Check that the global switch is on and the site is not in **Excluded Websites**, then reload the tab (settings are read at `document_start`). |
 | A timer is skipped but the button is not clicked | Auto-clicking is off by default — enable **Auto-Click** in the popup. |
+| A timer on a site I want skipped is not accelerated | The page did not look like a gate. Turn off **Only Act On Countdown Gate Pages** for that site (it also arms timer acceleration everywhere), then reload and report the URL so the heuristic can be extended safely. |
+| A countdown is shorter than expected, or timers feel odd on a site | Turn off **Skip JavaScript Timers**, or exclude that domain — the injector stays a pass-through whenever gate detection has not confirmed a gate. |
 | A gated page is not detected | Temporarily turn off **Only Act On Countdown Gate Pages** for that site and open an issue with the URL so the heuristic can be extended safely. |
-| A site breaks (layout, modal, script error) | Disable the extension for that domain with the popup toggle and open an issue. |
+| A site breaks (layout, modal, script error) | Disable the extension for that domain with the popup toggle and open an issue. Report the URL — non-gate breakage is treated as a bug, not a configuration issue. |
 | Settings did not apply | Reload the tab after saving; content scripts do not hot-reload. |
 
 ---
@@ -257,7 +296,8 @@ Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the pro
 coding conventions, and the privacy / no-dependency rules.
 
 ```bash
-node test/content-guards.test.js                          # guard regression tests
+node test/content-guards.test.js                          # content-script guard regression tests
+node test/injected-guards.test.js                         # injector arming / clock regression tests
 for f in src/*.js test/*.js; do node --check "$f"; done    # syntax check
 ```
 

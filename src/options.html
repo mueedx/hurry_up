@@ -73,7 +73,7 @@
         <div class="setting-row">
           <div class="setting-desc">
             <h4>Skip JavaScript Timers</h4>
-            <p>Intercept and accelerate native setTimeout and setInterval functions.</p>
+            <p>Accelerate native setTimeout/setInterval and the page clock — only on confirmed countdown-gate pages. Ordinary sites keep fully native timing.</p>
           </div>
           <label class="sk-switch">
             <input type="checkbox" id="opt-speedup-timers">
@@ -98,10 +98,10 @@
         <div class="form-field">
           <label class="field-label" for="opt-timer-mode">Mode</label>
           <select id="opt-timer-mode" class="field-input">
-            <option value="instant">Instant (0ms) - Force qualifying timers to run immediately</option>
+            <option value="instant">Instant - Collapse long waits to a ~25ms tick</option>
             <option value="accelerated">Accelerated (Multiplier) - Fast forward tick rate</option>
           </select>
-          <div class="field-hint">Instant mode solves countdowns immediately; accelerated is useful if a site needs tick animation steps.</div>
+          <div class="field-hint">Instant makes countdowns finish almost immediately without ever running timers at 0ms; accelerated is useful if a site needs tick animation steps.</div>
         </div>
 
         <div class="form-field" id="multiplier-group">
@@ -248,7 +248,7 @@
         <div class="setting-row">
           <div class="setting-desc">
             <h4>Only Act On Countdown Gate Pages</h4>
-            <p>Recommended. Restricts button unlocking and auto-clicking to pages that actually look like a download gate (countdown, "please wait" message, or timer overlay). Turn this off only if a site you trust is not being detected.</p>
+            <p>Recommended. Restricts button unlocking and auto-clicking <strong>and timer acceleration</strong> to pages that actually look like a download gate (countdown, "please wait" message, or timer overlay). Turn this off only if a site you trust is not being detected — it then applies everywhere.</p>
           </div>
           <label class="sk-switch">
             <input type="checkbox" id="opt-gate-detection">

@@ -40,4 +40,13 @@
 - [X] T023 Repair malformed markup/script ordering in `test/mock-timer-page.html` so Tests 3–4 bind correctly
 - [X] T024 Add open-source files: `LICENSE` (MIT), `PRIVACY.md`, `CONTRIBUTING.md`, `.gitignore`, and rewrite `README.md` (features, settings reference, testing, Web Store checklist)
 
+## Phase 9: Gate-Scoped Timing (ordinary sites stay native)
+- [X] T025 Stop `src/injected.js` from arming on every page: `state.enabled` now defaults to `false` and patched timers/clock are pass-through until `src/content.js` confirms a gate (FR-1.5)
+- [X] T026 Remove the per-animation-frame clock warp and stop patching `requestAnimationFrame`; drive the virtual clock from gate state only with `INITIAL_SKEW_MS`/`CLOCK_STEP_MS`/`MAX_CLOCK_SKEW_MS` bounds (FR-1.6)
+- [X] T027 Collapse Instant mode to `INSTANT_FLOOR_MS` (25ms) instead of `0`/`15ms`, so countdowns can no longer double-fire or hot-loop (FR-1.2)
+- [X] T028 Throttle stat reporting (`STAT_THROTTLE_MS`) and poll at `POLL_INTERVAL_MS` with an armed-only guard so fast-forwarded gates cannot storm `chrome.storage` (FR-1.7)
+- [X] T029 Add the ISOLATED-world gate probe in `src/content.js` (`timerGateActive`/`looksLikeCountdownGate`/`hasNumericCountdownNearWaitText`) and feed `enabled: isSiteEnabled && timerGateActive` into `__HURRY_UP_CONFIG_SYNC__`, re-evaluated on DOM mutation, load, interval, and capture-phase click
+- [X] T030 Gate `processOverlays()` behind `looksLikeGateOverlay()` so a countdown-ish class name alone can no longer hide real containers (FR-1.8)
+- [X] T031 Add `test/injected-guards.test.js` and extend `test/content-guards.test.js` with gate-arming / busy-SPA / loose-copy / opt-out cases; confirm both fail against pre-fix revisions via `HURRY_UP_*_SCRIPT` overrides
+
 
