@@ -10,7 +10,7 @@ with `manifest.json` whenever the name, description, or permissions change.
 | Field | Value | Limit |
 | --- | --- | --- |
 | **Name** | `Hurry Up! - Timer Skipper & Fast Downloader` | 75 chars (43 used) |
-| **Summary** | `Skips countdown timers and wait overlays on download-gate pages. Opt-in, gate-aware auto-clicking. No data collection.` | 132 chars (118 used) |
+| **Summary** | `Off by default - enable per site from the popup. Skips countdown timers & wait overlays on download-gate pages. No data collection.` | 132 chars (131 used) |
 | **Category** | Productivity / Developer Tools | — |
 | **Language** | English | — |
 | **Homepage URL** | `https://github.com/mueedx/resume` (or the repo permalink) | — |
@@ -30,6 +30,8 @@ HOW IT WORKS
 • Suppresses the "please wait" overlay and countdown backdrop that blocks the page.
 • Optionally clicks the revealed download button for you (off by default, opt-in).
 • Can also unlock a download button a gate left disabled.
+• You choose where it runs: it is off on every site by default — flip its switch on
+  for a site in the popup to activate it there (and only there).
 
 WHAT MAKES IT SAFE
 This extension never guesses. It stays completely inert on ordinary websites:
@@ -41,7 +43,7 @@ This extension never guesses. It stays completely inert on ordinary websites:
 • Hidden, disabled, or aria-hidden controls are never force-revealed in order to be
   clicked.
 • Auto-clicking is off until you turn it on, and only matches short button labels.
-• Your excluded-site list always wins.
+• It only runs on sites you switch on — off by default everywhere else.
 
 PRIVACY
 No accounts, no analytics, no telemetry, no servers, no network requests of its own.
@@ -67,19 +69,22 @@ Skip countdown waits on download-gate pages.
 
 Paste each into the matching field on the **Privacy practices** tab.
 
-- **`storage`** — Persists the user's settings, per-site exclusions, and local counters in
-  the browser profile. Optional Chrome Sync is used only to carry the same settings to the
-  user's other signed-in devices. No page data is stored or transmitted.
+- **`storage`** — Persists the user's settings, per-site list of enabled websites, and local
+  counters in the browser profile. Optional Chrome Sync is used only to carry the same
+  settings to the user's other signed-in devices. No page data is stored or transmitted.
 
-- **`activeTab`** — Lets the toolbar popup apply the user's toggle (enable/exclude) to the
-  tab the user is actively viewing, without requesting broad tab access.
+- **`activeTab`** — Lets the toolbar popup apply the user's per-site toggle (turn the
+  extension on/off for the tab the user is actively viewing) without requesting broad tab
+  access.
 
 - **Content script on `<all_urls>` (host permission)** — Countdown download gates appear
   on arbitrary domains, so the timing/DOM logic has to be injectable wherever the user
   browses. The scripts are inert until a countdown-gate heuristic confirms a gate: on
   ordinary pages no timer is patched, no clock is warped, and no DOM is modified. The
   scripts read page text locally only for that gate check, never collect it, never store
-  it, and never transmit it. Users can additionally exclude any domain from the popup.
+  it, and never transmit it. On top of that, the extension is **off on every site by
+  default**: nothing runs anywhere until the user flips the per-site switch on for that
+  domain from the popup (opt-in allowlist).
 
 - **Remote code** — None. No `eval`, no `new Function`, no remote scripts, no CDN assets,
   no build step.
@@ -114,10 +119,10 @@ no unrelated use, no creditworthiness use) all hold, as documented in `PRIVACY.m
 
 | # | Shot | What to show |
 | --- | --- | --- |
-| 1 | Popup | Per-site toggle ON, `globalEnabled` ON, exclusion list visible on a real domain. |
+| 1 | Popup | Per-site switch ON for the domain (badge `Active`), and a second shot of the default OFF state on a fresh site. |
 | 2 | Options → Timers & Speed Hack | Timer interception toggle, execution strategy (`Instant` ≈25 ms floor), delay window. |
 | 3 | Options → Overlays & Auto-Click | Overlay suppression plus the opt-in auto-click switch and its safety notes. |
-| 4 | Options → Backups / Excluded Sites | Export/import controls and the exclusion manager. |
+| 4 | Options → Enabled Websites / Backups | Export/import controls and the opt-in allowlist manager. |
 | 5 | Before/after on a gate page | Countdown gate counting down vs. button already revealed (blur any real URL). |
 
 Optional promo tile: 440×280. Store icon `icons/icon128.png` is already 128×128 RGBA.
@@ -154,13 +159,16 @@ No login, no account, no network access required.
    timers, that hidden controls are never force-revealed, and that a real gate page
    still unlocks and clicks exactly once.
 
-2. Manual reproduction:
+2. Manual reproduction (the extension is OFF until you switch a site on):
    - Open test/mock-timer-page.html from the unpacked extension's folder
      (enable "Allow access to file URLs", or serve it with `python3 -m http.server`).
+   - Click the extension icon and flip the site switch ON (badge turns green ON),
+     then reload the page.
    - Test 1: a 10s setTimeout gate resolves immediately and (with auto-click on) the
      revealed button is clicked.
    - Test 5 (regression): a collapsed menu containing "Download chat transcript" stays
      hidden and is never clicked.
+   - With the switch left OFF (the default), the page's timers and DOM stay untouched.
 
 3. Behaviour note: timer acceleration is scoped to pages that look like a countdown
    gate. Surfaces such as video search results therefore keep native timing by design;

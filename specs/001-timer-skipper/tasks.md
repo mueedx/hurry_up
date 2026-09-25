@@ -52,4 +52,13 @@
 ## Phase 10: Store Submission Prep
 - [X] T032 Draft the store listing copy, permission justifications, data-use answers, screenshot shot list, packaging/versioning steps, and reviewer notes in `specs/001-timer-skipper/store-listing.md`; verify `icons/icon128.png` is 128×128 and manifest name/description fit Chrome limits
 
+## Phase 11: Off-by-Default Per-Site Opt-In (FR-5.0)
+- [X] T033 Replace the `disabledDomains` blocklist with an `enabledDomains` opt-in allowlist in `src/storage.js` (default `[]`, legacy key dropped on validation) and add `isDomainListed()`/`isDomainEnabled()` helpers replacing `isDomainDisabled()`
+- [X] T034 Gate `src/content.js` on `isDomainEnabled()` so nothing runs — no overlay work, no gate probing, no injector arming — on sites the user has not switched on
+- [X] T035 Invert the popup site toggle to opt the current hostname into the allowlist, show badge/status "Off" for unlisted sites, and update `src/popup.html` copy for the off-by-default model
+- [X] T036 Show a green `ON` badge on allowlisted hosts and red `OFF` everywhere else in `src/background.js`
+- [X] T037 Rename the options "Excluded Websites" tab to "Enabled Websites" and invert `src/options.js` add/remove semantics and copy
+- [X] T038 Extend `test/content-guards.test.js` with a per-site opt-in suite (default allowlist empty, gate page untouched until opted in, `isDomainEnabled` fail-safe/subdomain/global-switch cases) and update fixtures to opt the test site in
+- [X] T039 Update README, PRIVACY.md, CONTRIBUTING.md, spec (FR-5.0/5.1/5.2/6.3), plan, and store-listing copy for the opt-in model
+
 

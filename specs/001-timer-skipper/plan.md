@@ -12,7 +12,7 @@
 - **Execution Worlds**:
   - `MAIN` execution world: For `injected.js` to patch page primitives (`window.setTimeout`, `window.setInterval`, `window.fetch`, `window.XMLHttpRequest`).
   - `ISOLATED` execution world: For `content.js` to query Chrome storage, inspect DOM mutations via `MutationObserver`, safely click validated download triggers, and bridge config to the page.
-- **Background Worker**: `background.js` (MV3 Service Worker) for default settings setup, badge status sync (`OFF` indicator for excluded domains), and storage events.
+- **Background Worker**: `background.js` (MV3 Service Worker) for default settings setup, badge status sync (`ON` green for per-site opt-in / `OFF` red by default), and storage events.
 - **Storage Strategy**: `chrome.storage.sync` with automatic fallback to `chrome.storage.local`.
 - **Options UI**: Full-page tabbed settings view (`options_ui.open_in_tab: true`) with JSON export/import validation.
 

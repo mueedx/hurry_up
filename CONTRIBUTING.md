@@ -25,11 +25,11 @@ loads.
 ```text
 manifest.json               MV3 manifest (permissions, content scripts, popup, options)
 src/injected.js             MAIN-world hooks: setTimeout/setInterval/rAF/fetch/XHR
-src/storage.js              Defaults, schema validation, get/save, domain exclusions
+src/storage.js              Defaults, schema validation, get/save, per-site allowlist
 src/content.js              ISOLATED world: gate detection, overlay suppression, safe auto-click
 src/background.js           Service worker: badge state
 src/popup.*                 Quick toggles + stats
-src/options.*               Full dashboard (timers, network, exclusions, DOM, backup)
+src/options.*               Full dashboard (timers, network, enabled sites, DOM, backup)
 test/mock-timer-page.html   Manual browser test bench
 test/content-guards.test.js Automated guard regression tests (Node, no deps)
 specs/001-timer-skipper/    Feature spec, plan, tasks
@@ -41,7 +41,9 @@ specs/001-timer-skipper/    Feature spec, plan, tasks
    select the repository root.
 2. After editing `src/*`, click the reload icon on the extension card.
 3. Open the test bench (`test/mock-timer-page.html`) with "Allow access to file URLs"
-   enabled to exercise timers, overlays, network hooks, and auto-clicking.
+   enabled, flip the site switch on in the popup (the extension is off on every site by
+   default), and reload the page to exercise timers, overlays, network hooks, and
+   auto-clicking.
 4. Reload the page under test after changing settings — content scripts read settings
    at `document_start`.
 
@@ -88,7 +90,7 @@ Please include:
 
 - Browser and version, extension version, and OS
 - The exact page URL (or a minimal reproduction) and the steps you took
-- Whether the site is excluded, and whether auto-clicking is enabled
+- Whether the site is switched on for Hurry Up! (it is off by default on every site), and whether auto-clicking is enabled
 - Console errors from the page and from the extension's service worker
   (`chrome://extensions` → **Inspect views: service worker**)
 

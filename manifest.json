@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Hurry Up! - Timer Skipper & Fast Downloader",
   "version": "1.0.0",
-  "description": "Skips countdown timers and wait overlays on download-gate pages. Opt-in, gate-aware auto-clicking. No data collection.",
+  "description": "Off by default - enable per site from the popup. Skips countdown timers & wait overlays on download-gate pages. No data collection.",
   "permissions": [
     "storage",
     "activeTab"

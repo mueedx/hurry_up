@@ -18,7 +18,7 @@ does and does not do with your data.
 The extension stores only your own configuration, using Chrome's built-in
 `chrome.storage` API:
 
-- Global on/off switch and the list of excluded websites (domains you disabled)
+- Global on/off switch and the list of websites you have enabled (the opt-in allowlist)
 - Timer rules (bypass mode, multiplier, min/max delay, function cloaking)
 - Network-hook rules and the list of API URL patterns you chose to watch
 - Overlay CSS selectors, auto-click keywords, settling delay, anti-ad filtering

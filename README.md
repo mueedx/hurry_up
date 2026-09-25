@@ -7,6 +7,8 @@ page finally reveals.
 
 - **Privacy:** no data collection, no telemetry, no network requests of its own — details in [PRIVACY.md](PRIVACY.md)
 - **Permissions:** `storage` + `activeTab` only (no host permissions, no `downloads`, no `webRequest`)
+- **Off by default everywhere:** the extension is dormant on every site until you flip its
+  switch **on for that site** with the toolbar popup (opt-in allowlist, no blanket access)
 - **Auto-clicking:** **off by default**, opt-in, and limited to pages that look like a real countdown gate
 - **Timer patching:** also gate-scoped — on ordinary sites the injector is a pass-through and timers stay native
 - **Dependencies:** none — no build step, no bundler, no remote code (MV3 compliant)
@@ -31,8 +33,10 @@ deliberately conservative:
 3. **A click only happens on a genuinely visible, enabled, in-layout control** that matches
    one of your keywords, is not inside an ad wrapper, and is not inside a long block of page
    copy (`> 64` characters is treated as text, not a button label).
-4. **Your exclusions win.** The per-site toggle, the global switch, and every feature switch
-   are honoured — an excluded domain is left completely untouched (badge shows `OFF`).
+4. **Off by default — your opt-in decides where it runs.** The extension starts **off on
+   every site** (empty allowlist). It only runs where you flipped the popup switch on for
+   that domain; the global switch and every feature switch are still honoured there, and
+   everywhere else the badge shows `OFF`.
 5. **No timer patching on pages that are not a gate.** `setTimeout`, `setInterval` and the
    virtual clock are only rewritten once a page passes the countdown-gate heuristic. Video
    players, chat apps, dashboards, and single-page apps therefore run with completely native
@@ -87,16 +91,17 @@ a bug worth reporting immediately — see [CONTRIBUTING.md](CONTRIBUTING.md).
      delay so the page's own click listeners are bound.
    - Anti-ad safeguard skips elements inside ad wrappers, sponsored blocks, and iframes.
 
-5. **Per-site disable toggle (popup)**
-   - Shows the current domain with a one-click on/off switch, quick switches for global
-     protection, timer skipping, and auto-clicking, plus local counters.
-   - The toolbar badge shows `OFF` on excluded domains.
+5. **Per-site enable toggle (popup)**
+   - Off on every site by default. Shows the current domain with a one-click switch to run
+     Hurry Up! there, plus quick switches for global protection, timer skipping, and
+     auto-clicking, and local counters.
+   - The toolbar badge shows green `ON` where you enabled it and red `OFF` everywhere else.
 
 6. **Full-page options dashboard**
    - **Timers & Speed Hack:** global switch, timer bypass, mode, multiplier, delay window,
      cloaking.
    - **Network Interceptor:** fetch/XHR hooking and watched API patterns.
-   - **Excluded Websites:** search, add, and remove domains.
+   - **Enabled Websites:** the opt-in allowlist — search, add, and remove domains.
    - **Overlays & Auto-Click:** overlay selectors, auto-click opt-in, gate-only safety mode,
      anti-ad filter, keywords, settling delay.
    - **Backup & Restore:** JSON export, schema-validated import, factory reset.
@@ -116,12 +121,15 @@ a bug worth reporting immediately — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Usage
 
-1. Open a download-gate page (the ones that count down before revealing a link).
+1. The extension is **off on every site by default**. On a download-gate page, click the
+   toolbar icon and flip the site switch **on** — the badge turns green `ON` — then reload
+   the tab (settings are read at `document_start`).
 2. The countdown speeds up and the "please wait" overlay disappears.
 3. If you want the download button clicked for you, enable **Auto-Click** in the popup —
    it is off by default.
-4. If a site misbehaves, open the popup and switch that site **off**; Hurry Up! will not run
-   there again until you re-enable it.
+4. To stop using Hurry Up! on a site, flip the site switch off again (or remove it under
+   **Enabled Websites** in the options dashboard); it stays dormant there until you
+   re-enable it.
 
 ---
 
@@ -133,7 +141,7 @@ All defaults come from `src/storage.js` and are validated on every read/write
 | Setting | Default | Notes |
 | --- | --- | --- |
 | `globalEnabled` | `true` | Master switch for the whole extension. |
-| `disabledDomains` | `[]` | Domains where the extension must not run (popup toggle). |
+| `enabledDomains` | `[]` | **Opt-in allowlist** — the extension is off on every site that is not listed here; the popup toggle and the **Enabled Websites** tab manage it (legacy `disabledDomains` data is dropped on import). |
 | `timerSettings.speedUpTimers` | `true` | Hook `setTimeout`/`setInterval` + the virtual clock, on confirmed gate pages only. |
 | `timerSettings.mode` | `"instant"` | `"instant"` (collapse long waits to a 25 ms tick) or `"accelerated"` (÷ multiplier). |
 | `timerSettings.speedMultiplier` | `50` | Used when mode is `"accelerated"`. |
@@ -171,6 +179,8 @@ node test/injected-guards.test.js  # MAIN-world injector: timer arming, skew, st
 - a hidden control is never force-unlocked in order to be clicked,
 - a real countdown gate page still unlocks and auto-clicks its button exactly once,
 - auto-clicking stays inert while the opt-in setting is off,
+- the shipped default (empty `enabledDomains`) leaves every site — even a real gate page —
+  completely untouched, and flipping the per-site switch makes gate handling work,
 - ordinary, busy client-rendered and "please wait" spinner pages never arm the timer
   patching, while real gates (and the explicit gate-detection opt-out) do,
 - video-player timecodes and premiere countdown containers are never hidden.
@@ -190,7 +200,9 @@ Both accept an override for negative testing, e.g.
 ### Manual browser test bench
 
 Open `test/mock-timer-page.html` (enable **Allow access to file URLs** if you load it via
-`file://`):
+`file://`), then **flip the site switch on in the popup** — the extension is off on every
+site (including local files) until you do, and settings are read at `document_start`, so
+reload the page after switching:
 
 | Test | What it verifies |
 | --- | --- |
@@ -210,12 +222,12 @@ changing settings — content scripts read settings at `document_start`.
 ```text
 manifest.json                 MV3 manifest: permissions, content scripts, popup, options
 src/injected.js               MAIN world: setTimeout/setInterval/rAF/fetch/XHR hooks
-src/storage.js                Defaults, schema validation, get/save, domain exclusions
+src/storage.js                Defaults, schema validation, get/save, per-site allowlist
 src/content.js                ISOLATED world: gate detection, overlays, safe unlock/auto-click
 src/content.css               Extension-namespaced overlay/highlight styles
 src/background.js             Service worker: badge state
 src/popup.html / .css / .js   Quick toggles and counters
-src/options.html / .css / .js Full dashboard (tabs, exclusions, import/export)
+src/options.html / .css / .js Full dashboard (tabs, enabled sites, import/export)
 test/mock-timer-page.html     Manual browser test bench
 test/content-guards.test.js   Automated guard regression tests (Node only)
 specs/001-timer-skipper/      Feature spec, plan, tasks
@@ -234,9 +246,9 @@ Read the full disclosure: [PRIVACY.md](PRIVACY.md).
 
 | Permission | Reason |
 | --- | --- |
-| `storage` | Save your settings and exclusions in your browser profile. |
+| `storage` | Save your settings and the list of enabled websites in your browser profile. |
 | `activeTab` | Apply changes to the tab you are actively using. |
-| Content script on `<all_urls>` | Countdown gates exist on many domains, so the timer/DOM logic must be able to run wherever you browse. It is inert on non-gate pages. |
+| Content script on `<all_urls>` | Countdown gates exist on many domains, so the timer/DOM logic must be able to run wherever you browse — but it does nothing until you switch the extension on for that site (opt-in) and only acts on confirmed gate pages. |
 
 ---
 
@@ -270,7 +282,7 @@ zip -r hurry-up-1.0.0.zip manifest.json icons src -x "*.DS_Store"
 - [ ] **Permission justifications** to paste into the listing — drafted ready-to-paste,
       together with the listing copy, screenshot shot list, and reviewer notes, in
       [`specs/001-timer-skipper/store-listing.md`](specs/001-timer-skipper/store-listing.md) §3:
-  - `storage` — persists user settings and the excluded-domain list locally.
+  - `storage` — persists user settings and the per-site enabled-domain list locally.
   - `activeTab` — applies the user's chosen action to the active tab.
   - Content script injection — required to neutralise in-page countdown timers on the
     websites the user visits; it does not read, collect, or transmit page data.
@@ -285,10 +297,10 @@ zip -r hurry-up-1.0.0.zip manifest.json icons src -x "*.DS_Store"
 
 | Symptom | Fix |
 | --- | --- |
-| Nothing happens on a site | Check that the global switch is on and the site is not in **Excluded Websites**, then reload the tab (settings are read at `document_start`). |
+| Nothing happens on a site | The extension is off on every site by default — turn it **on for that site** with the popup toggle (or under **Enabled Websites**), keep the global switch on, then reload the tab (settings are read at `document_start`). |
 | A timer is skipped but the button is not clicked | Auto-clicking is off by default — enable **Auto-Click** in the popup. |
 | A timer on a site I want skipped is not accelerated | The page did not look like a gate. Turn off **Only Act On Countdown Gate Pages** for that site (it also arms timer acceleration everywhere), then reload and report the URL so the heuristic can be extended safely. |
-| A countdown is shorter than expected, or timers feel odd on a site | Turn off **Skip JavaScript Timers**, or exclude that domain — the injector stays a pass-through whenever gate detection has not confirmed a gate. |
+| A countdown is shorter than expected, or timers feel odd on a site | Turn off **Skip JavaScript Timers**, or flip that domain's popup switch off — the injector stays a pass-through whenever gate detection has not confirmed a gate. |
 | A gated page is not detected | Temporarily turn off **Only Act On Countdown Gate Pages** for that site and open an issue with the URL so the heuristic can be extended safely. |
 | A site breaks (layout, modal, script error) | Disable the extension for that domain with the popup toggle and open an issue. Report the URL — non-gate breakage is treated as a bug, not a configuration issue. |
 | Settings did not apply | Reload the tab after saving; content scripts do not hot-reload. |

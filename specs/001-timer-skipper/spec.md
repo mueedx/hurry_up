@@ -13,7 +13,7 @@ Users visiting download, file-sharing, content, or verification portals frequent
 2. Visual overlay elements (modal popups, "Please wait" backdrop containers) disabling access to the destination link.
 3. Delayed network calls that defer requesting the download link or authorization token from the server until the timer runs out.
 
-**Hurry Up** is a browser extension that eliminates these artificial delays automatically. It fast-forwards or skips countdown timers, suppresses blocking overlays, intercepts delayed API calls, auto-clicks download buttons, provides one-click domain-level exclusion, and offers a comprehensive tab-based settings dashboard with full backup/restore (import/export) capabilities.
+**Hurry Up** is a browser extension that eliminates these artificial delays automatically. It fast-forwards or skips countdown timers, suppresses blocking overlays, intercepts delayed API calls, auto-clicks download buttons, provides one-click per-site activation (off by default on every site), and offers a comprehensive tab-based settings dashboard with full backup/restore (import/export) capabilities.
 
 ---
 
@@ -21,8 +21,8 @@ Users visiting download, file-sharing, content, or verification portals frequent
 
 - **As a user downloading files or tools**, I want countdown timers to resolve instantly so that I don't waste time waiting.
 - **As a user encountering overlay modals**, I want the blocking screen to disappear and the download button to be revealed immediately.
-- **As a user on a site where timers are necessary for functional reasons (e.g., banking, e-learning, timed quizzes)**, I want to disable the extension for that specific website in one click from the popup so that normal functionality is never broken.
-- **As a power user**, I want to export my settings, exclusion lists, and custom selectors to a file and import them across multiple browsers/profiles seamlessly.
+- **As a user on a site where timers are necessary for functional reasons (e.g., banking, e-learning, timed quizzes)**, I want the extension to stay off unless I explicitly switch it on for that website in one click from the popup, so that normal functionality is never broken.
+- **As a power user**, I want to export my settings, the list of enabled websites, and custom selectors to a file and import them across multiple browsers/profiles seamlessly.
 - **As a user facing delayed network-generated links**, I want the extension to intercept delayed API requests and trigger them immediately rather than waiting for client-side delays.
 
 ---
@@ -60,21 +60,22 @@ Users visiting download, file-sharing, content, or verification portals frequent
 - **FR-4.6 (opt-in)**: Auto-clicking defaults to `false`; the extension must not click anything on any page until the user enables it in the popup or options dashboard.
 
 
-### 3.5 Per-Site Disabling & Quick-Access Popup
+### 3.5 Per-Site Opt-In & Quick-Access Popup
+- **FR-5.0 (off by default)**: The extension must be **dormant on every site by default**. It may only act on a hostname listed in an opt-in allowlist (`enabledDomains`) that the user explicitly manages via the popup icon toggle (FR-5.1) or the options dashboard (FR-6.3), and only while the global switch (FR-5.1) is on. An empty allowlist — the shipped default — means no site is touched at all.
 - **FR-5.1**: Provide a popup accessible directly from the extension icon showing:
   - Current active website hostname (e.g., `files.example.com`).
-  - One-click toggle switch to enable/disable the extension on the current domain.
+  - One-click toggle switch that turns the extension on/off **for the current domain only** (adds/removes it from the opt-in allowlist).
   - Global master on/off switch.
   - Quick count of bypassed timers/clicks on the active tab.
   - Quick-link button to open the full settings tab.
-- **FR-5.2**: Update extension badge (e.g., displaying `OFF` or changing badge color) when visiting an excluded site.
+- **FR-5.2**: Update the extension badge per site: green `ON` where the extension is enabled for that host, red `OFF` everywhere else (the default state).
 
 ### 3.6 Tab-Based Options & Settings Dashboard
 - **FR-6.1**: Open a spacious, multi-tabbed options dashboard in a dedicated browser tab.
 - **FR-6.2**: Provide distinct tabs:
   1. *Timers & Acceleration*: Master switch, bypass mode (Instant vs Accelerated), delay thresholds, cloaking.
   2. *Network Interceptor*: Fetch/XHR hook toggle, monitored endpoint keywords/patterns.
-  3. *Excluded Websites*: Interactive table of excluded domains with search, manual domain addition, and one-click removal.
+  3. *Enabled Websites*: Interactive opt-in allowlist of domains where the extension may run, with search, manual domain addition, and one-click removal.
   4. *Overlays & Auto-Clicker*: Auto-hide overlays toggle, custom selectors, button text keywords, ad-safeguards.
   5. *Backup & Restore (Import / Export)*: JSON configuration exporter, schema-validated JSON importer with preview, and factory reset option.
   6. *Statistics*: Lifetime count of skipped timers, accelerated requests, and clicked buttons.
@@ -87,7 +88,7 @@ Users visiting download, file-sharing, content, or verification portals frequent
 2. **Overlay Removal**: Timer overlay on the mock test page is suppressed and the download button is made interactable.
 3. **Auto-Clicking**: With auto-clicking enabled in the popup, the download button is clicked automatically with debounce safety and only after the gate heuristic passes; with the default setting (`autoClick: false`) nothing on any page is clicked.
 4. **Safety (regression)**: On an ordinary page with no countdown gate — including a *collapsed* menu containing a "Download…" control — no control is revealed, mutated, or clicked. Verified automatically by `node test/content-guards.test.js` and manually by Test 5 of the mock harness.
-5. **Per-Site Exclusion**: Disabling the extension on a site from the popup immediately halts bypass logic on that site and persists across reloads.
+5. **Per-Site Opt-In (off by default)**: With the shipped settings (`enabledDomains: []`) the extension acts on **no site at all** — enabling a site from the popup (or the Enabled Websites tab) activates bypass logic for that host only, persists across reloads, and switching it off again halts the logic immediately. Verified by the per-site opt-in suite in `node test/content-guards.test.js`.
 6. **Settings Export/Import**: Exporting settings generates a valid `.json` file; modifying settings and re-importing the JSON restores configuration accurately.
 7. **Network Interceptor**: Delayed API calls in the test harness are matched and counted without being modified.
 8. **Gate-scoped timing (regression)**: On an ordinary, busy client-rendered page (video/dashboard/SPA-like content, ticking timecodes, "please wait" spinners without a gate) the injector must leave `setTimeout`, `setInterval`, `Date`/`performance.now`, and `requestAnimationFrame` untouched — verified by `node test/injected-guards.test.js` and by the timer-arming assertions in `test/content-guards.test.js`.
