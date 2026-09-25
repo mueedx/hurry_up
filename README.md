@@ -80,7 +80,6 @@ a bug worth reporting immediately — see [CONTRIBUTING.md](CONTRIBUTING.md).
      anti-ad filter, keywords, settling delay.
    - **Backup & Restore:** JSON export, schema-validated import, factory reset.
 
-
 ---
 
 ## Installation (developer mode)
@@ -201,7 +200,6 @@ Read the full disclosure: [PRIVACY.md](PRIVACY.md).
 | `storage` | Save your settings and exclusions in your browser profile. |
 | `activeTab` | Apply changes to the tab you are actively using. |
 | Content script on `<all_urls>` | Countdown gates exist on many domains, so the timer/DOM logic must be able to run wherever you browse. It is inert on non-gate pages. |
-
 
 ---
 
