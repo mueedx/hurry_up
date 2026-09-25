@@ -13,6 +13,21 @@
   window.__HURRY_UP_CONTENT_SCRIPT__ = true;
 
   const currentHostname = window.location.hostname;
+
+  // Whether the MAIN-world injector is allowed to touch this page's timers. Stays
+  // false until looksLikeCountdownGate() confirms a real countdown / wait gate, so
+  // ordinary sites (video players, chat apps, dashboards) keep native timing.
+  let timerGateActive = false;
+  let gateProbeTimer = null;
+  let lastGateProbeAt = 0;
+
+  // A gate must be armed quickly, but probing a large DOM is not free, so checks are
+  // throttled and eventually given up on.
+  const GATE_PROBE_INTERVAL_MS = 300;
+  const GATE_PROBE_THROTTLE_MS = 1000;
+  const GATE_INTERACTION_PROBE_FLOOR_MS = 250;
+  const GATE_PROBE_MAX_MS = 30000;
+
   
   function isAlive() {
     try {
@@ -36,7 +51,7 @@
   function syncStateToInjected() {
     const isSiteEnabled = settings.globalEnabled && !disabled;
     const configPayload = {
-      enabled: isSiteEnabled,
+      enabled: isSiteEnabled && timerGateActive,
       speedUpTimers: settings.timerSettings.speedUpTimers,
       mode: settings.timerSettings.mode,
       speedMultiplier: settings.timerSettings.speedMultiplier,
@@ -103,12 +118,119 @@
   let gateSignalCache = { value: false, at: 0 };
   let realUrlCache = { value: null, at: 0 };
 
+  // Containers that are unambiguous countdown / wait-gate markers by name alone:
+  // `#gateMsg` / `#gateProg` are the gate readouts themselves, never layout wrappers.
+  const STRONG_GATE_SELECTOR = "#gateMsg, #gateProg, #please-wait-modal, .timer-backdrop";
+
+  // Overlay containers whose name alone proves they are a gate UI, so hiding them
+  // cannot remove real page content.
+  const SAFE_OVERLAY_SELECTOR = "#gateMsg, #gateProg, #please-wait-modal, .timer-backdrop";
+
+  // Proximity patterns: a wait-ish word followed by a number-with-unit or mm:ss
+  // readout. YouTube-style video durations ("3:45") never match on their own.
+  const WAIT_NEAR_TIME_PATTERN =
+    /\b(?:please\s+wait|waiting|wait|countdown|hold\s+on|redirect(?:ing)?|processing|preparing)\b[^.!?<>]{0,40}?\d{1,4}\s*(?:s|sec|secs|second|seconds|min|mins|minute|minutes)\b|\b(?:please\s+wait|waiting|wait|countdown|hold\s+on|redirect(?:ing)?)\b[^.!?<>]{0,40}?\d{1,2}:\d{2}\b/i;
+
+  const WAIT_WORD_PATTERN = /\b(?:please\s+wait|waiting|wait|countdown|hold\s+on|redirect(?:ing)?)\b/i;
+  const DOWNLOAD_WORD_PATTERN = /\b(?:download|downloading|link|mirror|file|server)\b/i;
+
+  // Any numeric time readout: "15 seconds", "00:45". Never a signal on its own -
+  // video durations and clocks look identical - only in combination with the above.
+  const NUMERIC_TIME_PATTERN = /\b\d{1,4}\s*(?:s|sec|secs|second|seconds|min|mins|minute|minutes)\b|\b\d{1,2}:\d{2}\b/i;
+
   /**
-   * Whether auto-actions are limited to pages that look like a real download gate.
+   * Whether timer acceleration is limited to pages that look like a countdown gate.
+   * Shares the auto-clicker's gate-detection toggle.
    */
   function isGateDetectionEnabled() {
     return !settings.autoClickSettings || settings.autoClickSettings.gateDetection !== false;
   }
+
+  /**
+   * Reads a bounded sample of the page's *visible* text without forcing layout
+   * (`innerText` on a huge page is expensive, and a TreeWalker can stop early).
+   */
+  function pageTextSample(limit = 4000) {
+    const body = document.body;
+    if (!body) return "";
+
+    let out = "";
+    try {
+      if (typeof document.createTreeWalker === "function" && typeof NodeFilter !== "undefined") {
+        const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+          acceptNode(node) {
+            const parent = node.parentElement;
+            if (!parent) return NodeFilter.FILTER_REJECT;
+            const tag = parent.tagName;
+            if (tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT" || tag === "TEMPLATE") {
+              return NodeFilter.FILTER_REJECT;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+          }
+        });
+
+        let node;
+        while ((node = walker.nextNode()) && out.length < limit) {
+          out += " " + (node.nodeValue || "");
+        }
+      } else {
+        out = body.textContent || "";
+      }
+    } catch (e) {
+      return "";
+    }
+
+    return out.replace(/\s+/g, " ").trim().slice(0, limit);
+  }
+
+  /**
+   * Decides whether this page is really a countdown / wait gate.
+   *
+   * Three independent confirmations, checked cheapest-first:
+   *   1. A named gate container exists (#gateMsg / #gateProg / #dlBtn / #downloadBtn).
+   *   2. A gate element with gate/countdown text exists (hasDownloadGateSignal).
+   *   3. Visible text contains a wait word *next to* a countdown readout plus a
+   *      download-ish word - proximity, not just keyword soup.
+   *
+   * Fails closed: any probe error means "not a gate", so a page we cannot inspect is
+   * left with native timers.
+   */
+  function looksLikeCountdownGate() {
+    if (!isGateDetectionEnabled()) return true;
+
+    try {
+      if (document.querySelector(STRONG_GATE_SELECTOR)) return true;
+      if (hasDownloadGateSignal()) return true;
+      if (hasNumericCountdownNearWaitText()) return true;
+
+      // Titles are short and explicit, so they still need a numeric time next to a
+      // wait word. "Please wait - Dashboard" is a loading screen, not a gate.
+      const title = document.title || "";
+      if (WAIT_NEAR_TIME_PATTERN.test(title)) return true;
+      if (WAIT_WORD_PATTERN.test(title) && DOWNLOAD_WORD_PATTERN.test(title) && NUMERIC_TIME_PATTERN.test(title)) {
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Text-level gate confirmation used by looksLikeCountdownGate().
+   */
+  function hasNumericCountdownNearWaitText() {
+    const text = pageTextSample(4000);
+    if (!text) return false;
+    if (!DOWNLOAD_WORD_PATTERN.test(text)) return false;
+    return WAIT_NEAR_TIME_PATTERN.test(text);
+  }
+
+  /**
+   * Whether auto-actions are limited to pages that look like a real download gate.
+   * (Declared once above and shared with the timer-activation probe.)
+   */
 
   /**
    * Checks whether the current page actually looks like a countdown / download gate.
@@ -236,6 +358,25 @@
   /**
    * Scans and suppresses timer overlays, message gates, and progress bars
    */
+  /**
+   * Whether a selector match is genuinely a countdown / wait overlay rather than an
+   * unrelated container that merely has "timer" or "countdown" in its name (video
+   * players, premiere banners, dashboards). Only real gate UIs get hidden.
+   */
+  function looksLikeGateOverlay(el) {
+    if (!el || !el.tagName) return false;
+    if (["BODY", "HTML", "MAIN", "SCRIPT", "STYLE", "NOSCRIPT"].includes(el.tagName)) return false;
+    if (el.closest("script, style, noscript")) return false;
+
+    // Named gate containers are safe to hide on their own.
+    if (typeof el.matches === "function" && el.matches(SAFE_OVERLAY_SELECTOR)) return true;
+
+    const text = (el.textContent || "").replace(/\s+/g, " ").trim();
+    if (!text || text.length > 400) return false;
+
+    return GATE_TEXT_PATTERN.test(text) || COUNTDOWN_TEXT_PATTERN.test(text);
+  }
+
   function processOverlays() {
     if (!settings.overlaySettings || !settings.overlaySettings.hideOverlays) return;
     const selectors = settings.overlaySettings.customSelectors || [];
@@ -244,11 +385,13 @@
       try {
         const matches = document.querySelectorAll(sel);
         for (const el of matches) {
-          if (["BODY", "HTML", "MAIN"].includes(el.tagName)) continue;
-          if (!el.classList.contains("hurry-up-hidden-overlay")) {
-            el.classList.add("hurry-up-hidden-overlay");
-            document.body?.classList.add("hurry-up-unlocked");
-          }
+          if (el.classList.contains("hurry-up-hidden-overlay")) continue;
+          // Text check first: a `.timer`, `#countdown` or `[class*='countdown']`
+          // container on a non-gate page must never be hidden.
+          if (!looksLikeGateOverlay(el)) continue;
+
+          el.classList.add("hurry-up-hidden-overlay");
+          document.body?.classList.add("hurry-up-unlocked");
         }
       } catch (e) {
         // Selector syntax safety
@@ -403,10 +546,63 @@
 
   // Active mutation observer
   const observer = new MutationObserver(() => {
+    evaluateTimerGate();
     processOverlays();
     unlockDownloadButtons();
     processAutoClick();
   });
+
+  /**
+   * Arms the MAIN-world injector once this page has been confirmed as a countdown gate.
+   *
+   * `minGapMs` throttles probing: the mutation observer and poll run on very chatty
+   * pages, while an interaction probe only needs a short floor.
+   */
+  function evaluateTimerGate(minGapMs = GATE_PROBE_THROTTLE_MS) {
+    if (timerGateActive) return;
+    if (!settings.timerSettings || !settings.timerSettings.speedUpTimers) {
+      stopGateProbe();
+      return;
+    }
+
+    // Defensive: a non-numeric gap must never disable throttling (the observer calls
+    // this on every DOM change of very chatty pages).
+    const gap = Number.isFinite(minGapMs) ? minGapMs : GATE_PROBE_THROTTLE_MS;
+    const now = Date.now();
+    if (now - lastGateProbeAt < gap) return;
+    lastGateProbeAt = now;
+
+    if (!looksLikeCountdownGate()) {
+      if (now - gateProbeStartedAt > GATE_PROBE_MAX_MS) stopGateProbe();
+      return;
+    }
+
+    timerGateActive = true;
+    stopGateProbe();
+    // Re-sync so the MAIN world starts fast-forwarding this gate's timers.
+    syncStateToInjected();
+  }
+
+  function stopGateProbe() {
+    if (gateProbeTimer) {
+      clearInterval(gateProbeTimer);
+      gateProbeTimer = null;
+    }
+  }
+
+  /**
+   * Polls for a gate while the page is still settling. A gate can appear long after
+   * load (after a user clicks "Download"), so the observer re-checks too, but this
+   * probe is what catches plain server-rendered gates like my-subs.co.
+   */
+  const gateProbeStartedAt = Date.now();
+  gateProbeTimer = setInterval(() => evaluateTimerGate(), GATE_PROBE_INTERVAL_MS);
+  evaluateTimerGate(0);
+
+  // A click is the strongest hint that a gate is about to be built, and capture phase
+  // runs before the site's own handler - so the countdown that handler schedules is
+  // already covered by the time it starts.
+  document.addEventListener("click", () => evaluateTimerGate(GATE_INTERACTION_PROBE_FLOOR_MS), true);
 
   function initObserver() {
     processOverlays();
@@ -415,10 +611,12 @@
 
     if (document.body) {
       observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class", "disabled", "href"] });
+      evaluateTimerGate(0);
     } else {
       document.addEventListener("DOMContentLoaded", () => {
         if (document.body) {
           observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class", "disabled", "href"] });
+          evaluateTimerGate(0);
           processOverlays();
           unlockDownloadButtons();
           processAutoClick();
@@ -426,6 +624,8 @@
       });
     }
   }
+
+  window.addEventListener("load", () => evaluateTimerGate(0));
 
   initObserver();
 })();
