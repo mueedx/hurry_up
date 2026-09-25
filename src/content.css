@@ -1,0 +1,38 @@
+/*
+ * Hurry Up! - Overlay & Timer Suppression Styles
+ *
+ * Only extension-namespaced classes are declared here. Every class below is added
+ * by src/content.js at runtime, so this stylesheet never touches page markup on
+ * its own (no site-specific ids like #gateMsg or generic hooks like .is-hidden).
+ */
+
+/* Suppress gate messages, countdown overlays, and artificial progress bars */
+.hurry-up-hidden-overlay {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Force body overflow in case the overlay locked scroll */
+body.hurry-up-unlocked {
+  overflow: auto !important;
+  position: static !important;
+}
+
+/* Visual pulse highlight when Hurry Up clicks or unlocks a download button */
+.hurry-up-highlight-target {
+  outline: 3px solid #6366f1 !important;
+  outline-offset: 3px !important;
+  transition: outline 0.3s ease-in-out !important;
+  animation: hurry-up-pulse 1.2s infinite alternate !important;
+}
+
+@keyframes hurry-up-pulse {
+  from {
+    box-shadow: 0 0 8px rgba(99, 102, 241, 0.4);
+  }
+  to {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.85);
+  }
+}

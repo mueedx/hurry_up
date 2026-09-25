@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Hurry Up! Control Workspace</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <!-- Architectural Sidebar Navigation -->
+  <aside class="sidebar">
+    <div class="brand-unit">
+      <img src="../icons/icon48.png" alt="Hurry Up Logo">
+      <div class="brand-unit-text">
+        <h2>Hurry Up!</h2>
+        <span>Control Console</span>
+      </div>
+    </div>
+
+    <ul class="nav-tab-list">
+      <li>
+        <button class="tab-nav-btn active" data-tab="tab-timers">
+          <span class="tab-icon">⚡</span> Timers & Speed Hack
+        </button>
+      </li>
+      <li>
+        <button class="tab-nav-btn" data-tab="tab-network">
+          <span class="tab-icon">🌐</span> Network Interceptor
+        </button>
+      </li>
+      <li>
+        <button class="tab-nav-btn" data-tab="tab-exclusions">
+          <span class="tab-icon">🛡️</span> Excluded Websites
+        </button>
+      </li>
+      <li>
+        <button class="tab-nav-btn" data-tab="tab-dom">
+          <span class="tab-icon">🎯</span> Overlays & Auto-Click
+        </button>
+      </li>
+      <li>
+        <button class="tab-nav-btn" data-tab="tab-backup">
+          <span class="tab-icon">💾</span> Backup & Restore
+        </button>
+      </li>
+    </ul>
+
+    <div class="sidebar-bottom">
+      Version 1.0.0 &bull; Manifest V3 Engine
+    </div>
+  </aside>
+
+  <!-- Main Stage Workspace -->
+  <main class="main-stage">
+    <!-- TAB 1: Timers -->
+    <section id="tab-timers" class="tab-panel active">
+      <div class="header-block">
+        <h1>Timers & Speed Hack</h1>
+        <p>Fine-tune client-side JavaScript setTimeout and setInterval acceleration.</p>
+      </div>
+
+      <div class="glass-card">
+        <div class="setting-row">
+          <div class="setting-desc">
+            <h4>Global Extension Protection</h4>
+            <p>Master switch for all timer bypasses, overlays, and auto-actions.</p>
+          </div>
+          <label class="sk-switch">
+            <input type="checkbox" id="opt-global-enabled">
+            <span class="sk-slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-desc">
+            <h4>Skip JavaScript Timers</h4>
+            <p>Intercept and accelerate native setTimeout and setInterval functions.</p>
+          </div>
+          <label class="sk-switch">
+            <input type="checkbox" id="opt-speedup-timers">
+            <span class="sk-slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-desc">
+            <h4>Function Cloaking (Anti-Detection)</h4>
+            <p>Disguises modified functions to report native code in .toString() checks.</p>
+          </div>
+          <label class="sk-switch">
+            <input type="checkbox" id="opt-cloak-functions">
+            <span class="sk-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="glass-card">
+        <h3 class="glass-card-title">Bypass Execution Strategy</h3>
+        <div class="form-field">
+          <label class="field-label" for="opt-timer-mode">Mode</label>
+          <select id="opt-timer-mode" class="field-input">
+            <option value="instant">Instant (0ms) - Force qualifying timers to run immediately</option>
+            <option value="accelerated">Accelerated (Multiplier) - Fast forward tick rate</option>
+          </select>
+          <div class="field-hint">Instant mode solves countdowns immediately; accelerated is useful if a site needs tick animation steps.</div>
+        </div>
+
+        <div class="form-field" id="multiplier-group">
+          <label class="field-label" for="opt-speed-multiplier">Tick Acceleration Multiplier</label>
+          <input type="number" id="opt-speed-multiplier" class="field-input" min="2" max="200" value="50">
+          <div class="field-hint">E.g., 50x accelerates a 10-second wait into 200 milliseconds.</div>
+        </div>
+      </div>
+
+      <div class="glass-card">
+        <h3 class="glass-card-title">Delay Range Bounds</h3>
+        <div class="form-field">
+          <label class="field-label" for="opt-min-delay">Minimum Delay Threshold (ms)</label>
+          <input type="number" id="opt-min-delay" class="field-input" min="0" step="100" value="500">
+          <div class="field-hint">Default 500ms ensures standard 1-second (1000ms) ticking countdowns are accelerated.</div>
+        </div>
+
+        <div class="form-field">
+          <label class="field-label" for="opt-max-delay">Maximum Delay Threshold (ms)</label>
+          <input type="number" id="opt-max-delay" class="field-input" min="1000" step="1000" value="60000">
+          <div class="field-hint">Ignore delays greater than this (default: 60,000ms / 1 min).</div>
+        </div>
+      </div>
+
+      <button id="save-timers-btn" class="btn btn-primary">Save Timer Configurations</button>
+    </section>
+
+    <!-- TAB 2: Network -->
+    <section id="tab-network" class="tab-panel">
+      <div class="header-block">
+        <h1>Network Request Interceptor</h1>
+        <p>Hooks fetch and XMLHttpRequest to detect and expedite delayed API link-generation endpoints.</p>
+      </div>
+
+      <div class="glass-card">
+        <div class="setting-row">
+          <div class="setting-desc">
+            <h4>Intercept fetch & XHR Calls</h4>
+            <p>Monitor page network calls for delayed link and token generation endpoints.</p>
+          </div>
+          <label class="sk-switch">
+            <input type="checkbox" id="opt-intercept-network">
+            <span class="sk-slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-desc">
+            <h4>Auto-Trigger Endpoints</h4>
+            <p>Unblock async promises to trigger delayed download link generation immediately.</p>
+          </div>
+          <label class="sk-switch">
+            <input type="checkbox" id="opt-autotrigger-api">
+            <span class="sk-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="glass-card">
+        <h3 class="glass-card-title">Monitored API URL Substrings</h3>
+        <p class="field-hint" style="margin-bottom: 12px;">When a request URL includes one of these keywords, Hurry Up expedites it.</p>
+        <div class="form-field">
+          <textarea id="opt-api-patterns" class="field-input" rows="5" placeholder="get_link&#10;generate_link&#10;token&#10;download_url"></textarea>
+          <div class="field-hint">Enter one pattern per line.</div>
+        </div>
+      </div>
+
+      <button id="save-network-btn" class="btn btn-primary">Save Network Settings</button>
+    </section>
+
+    <!-- TAB 3: Exclusions -->
+    <section id="tab-exclusions" class="tab-panel">
+      <div class="header-block">
+        <h1>Excluded Websites</h1>
+        <p>Hurry Up completely deactivates itself on these domains (e.g. banking, tests, streaming).</p>
+      </div>
+
+      <div class="glass-card">
+        <h3 class="glass-card-title">Add Website Exclusion</h3>
+        <div style="display: flex; gap: 10px;">
+          <input type="text" id="new-domain-input" class="field-input" placeholder="example.com or sub.example.com">
+          <button id="add-domain-btn" class="btn btn-primary" style="flex-shrink: 0;">Add Domain</button>
+        </div>
+      </div>
+
+      <div class="glass-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h3 class="glass-card-title" style="margin: 0;">Excluded Domains List</h3>
+          <input type="text" id="search-domain-input" class="field-input" placeholder="Filter domains..." style="width: 220px; padding: 7px 12px;">
+        </div>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Domain</th>
+              <th style="width: 100px; text-align: right;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="exclusions-table-body">
+            <!-- Dynamically populated -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 4: DOM Overlays & Auto Click -->
+    <section id="tab-dom" class="tab-panel">
+      <div class="header-block">
+        <h1>Overlays & Auto-Clicker</h1>
+        <p>Manage automatic countdown overlay hiding and download button triggering.</p>
+      </div>
+
+      <div class="glass-card">
+        <div class="setting-row">
+          <div class="setting-desc">
+            <h4>Hide Timer Overlays & Modals</h4>
+            <p>Forcefully hides backdrop containers and "Please wait" dialogs blocking access.</p>
+          </div>
+          <label class="sk-switch">
+            <input type="checkbox" id="opt-hide-overlays">
+            <span class="sk-slider"></span>
+          </label>
+        </div>
+
+        <div class="form-field" style="margin-top: 16px;">
+          <label class="field-label">Overlay CSS Selectors</label>
+          <textarea id="opt-overlay-selectors" class="field-input" rows="5"></textarea>
+          <div class="field-hint">One CSS selector per line (e.g. #countdown, .countdown, [id*='timer']).</div>
+        </div>
+      </div>
+
+      <div class="glass-card">
+        <div class="setting-row">
+          <div class="setting-desc">
+            <h4>Auto-Click Download Buttons</h4>
+            <p>Automatically triggers target buttons once the timer clears or the button becomes visible. <strong>Off by default</strong> so the extension never clicks anything until you opt in.</p>
+          </div>
+          <label class="sk-switch">
+            <input type="checkbox" id="opt-autoclick-btn">
+            <span class="sk-slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-desc">
+            <h4>Only Act On Countdown Gate Pages</h4>
+            <p>Recommended. Restricts button unlocking and auto-clicking to pages that actually look like a download gate (countdown, "please wait" message, or timer overlay). Turn this off only if a site you trust is not being detected.</p>
+          </div>
+          <label class="sk-switch">
+            <input type="checkbox" id="opt-gate-detection">
+            <span class="sk-slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-desc">
+            <h4>Anti-Ad Safeguard</h4>
+            <p>Prevents clicking on elements nested inside ad wrappers, iframes, or sponsored blocks.</p>
+          </div>
+          <label class="sk-switch">
+            <input type="checkbox" id="opt-antiad-filter">
+            <span class="sk-slider"></span>
+          </label>
+        </div>
+
+        <div class="form-field" style="margin-top: 16px;">
+          <label class="field-label">Target Button Text Keywords</label>
+          <textarea id="opt-button-keywords" class="field-input" rows="4"></textarea>
+          <div class="field-hint">One keyword per line (e.g. Download, Get Link, Proceed).</div>
+        </div>
+
+        <div class="form-field">
+          <label class="field-label" for="opt-click-delay">Settling Delay Before Click (ms)</label>
+          <input type="number" id="opt-click-delay" class="field-input" min="50" step="50" value="250">
+        </div>
+      </div>
+
+      <button id="save-dom-btn" class="btn btn-primary">Save DOM & Clicker Configurations</button>
+    </section>
+
+    <!-- TAB 5: Backup & Restore -->
+    <section id="tab-backup" class="tab-panel">
+      <div class="header-block">
+        <h1>Backup & Restore</h1>
+        <p>Export your Hurry Up configuration to JSON or restore from an existing backup.</p>
+      </div>
+
+      <div class="glass-card">
+        <h3 class="glass-card-title">Export Settings</h3>
+        <p class="field-hint" style="margin-bottom: 16px;">Download all your customized timers, exclusions, and selectors as a JSON file.</p>
+        <button id="export-settings-btn" class="btn btn-primary">Export Configuration (.json)</button>
+      </div>
+
+      <div class="glass-card">
+        <h3 class="glass-card-title">Import Settings</h3>
+        <p class="field-hint" style="margin-bottom: 16px;">Upload a previously saved Hurry Up JSON configuration file to restore your settings.</p>
+        <input type="file" id="import-file-input" accept=".json" style="display: none;">
+        <button id="trigger-import-btn" class="btn btn-secondary">Select JSON File to Import</button>
+      </div>
+
+      <div class="glass-card">
+        <h3 class="glass-card-title" style="color: #fb7185;">Factory Reset</h3>
+        <p class="field-hint" style="margin-bottom: 16px;">Reset all settings, excluded websites, and selectors back to original factory defaults.</p>
+        <button id="reset-defaults-btn" class="btn btn-danger">Reset to Defaults</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast">Configurations saved!</div>
+
+  <script src="storage.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

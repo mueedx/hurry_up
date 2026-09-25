@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Hurry Up!</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="glass-panel">
+    <!-- Header -->
+    <div class="header-row">
+      <div class="brand-wrapper">
+        <img src="../icons/icon48.png" alt="Hurry Up Logo">
+        <span class="brand-title">Hurry Up!</span>
+      </div>
+      <div id="global-badge" class="live-badge">
+        <span class="live-dot"></span>
+        <span id="badge-text">Active</span>
+      </div>
+    </div>
+
+    <!-- Active Domain Workspace Card -->
+    <div class="domain-card">
+      <div class="domain-card-header">
+        <div class="domain-meta">
+          <span class="domain-label">Active Website</span>
+          <span id="active-domain" class="domain-name">Detecting...</span>
+        </div>
+        <label class="sk-switch" title="Toggle extension on this website">
+          <input type="checkbox" id="site-toggle" checked>
+          <span class="sk-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Quick Feature Controls -->
+    <div class="switches-card">
+      <div class="switch-item">
+        <span class="switch-item-label">
+          <span class="switch-item-icon">⚡</span> Global Protection
+        </span>
+        <label class="sk-switch">
+          <input type="checkbox" id="global-toggle" checked>
+          <span class="sk-slider"></span>
+        </label>
+      </div>
+      <div class="switch-item">
+        <span class="switch-item-label">
+          <span class="switch-item-icon">⏱️</span> Skip Timers
+        </span>
+        <label class="sk-switch">
+          <input type="checkbox" id="timer-toggle" checked>
+          <span class="sk-slider"></span>
+        </label>
+      </div>
+      <div class="switch-item">
+        <span class="switch-item-label">
+          <span class="switch-item-icon">🚀</span> Auto-Click
+        </span>
+        <label class="sk-switch" title="Off by default - clicks download buttons on detected countdown gate pages only">
+          <input type="checkbox" id="click-toggle">
+          <span class="sk-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Telemetry Stats -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div id="stat-skipped" class="stat-number">0</div>
+        <div class="stat-desc">Timers Skipped</div>
+      </div>
+      <div class="stat-card">
+        <div id="stat-clicked" class="stat-number">0</div>
+        <div class="stat-desc">Buttons Clicked</div>
+      </div>
+    </div>
+
+    <!-- Dashboard Link -->
+    <button id="open-options-btn" class="settings-action-btn">
+      <span>⚙ Full Workspace Control</span>
+      <span style="opacity: 0.6; font-size: 11px;">↗</span>
+    </button>
+  </div>
+
+  <script src="storage.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
