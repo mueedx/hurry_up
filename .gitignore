@@ -1,0 +1,24 @@
+# Dependencies (the extension itself has none)
+node_modules/
+
+# Packaged / built extension artifacts
+dist/
+build/
+*.zip
+*.crx
+*.pem
+
+# Logs and temporary files
+*.log
+tmp/
+.DS_Store
+Thumbs.db
+
+# Editors / IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# Local agent / tooling state
+.kilo/
