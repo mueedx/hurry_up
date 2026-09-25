@@ -29,7 +29,7 @@
       </li>
       <li>
         <button class="tab-nav-btn" data-tab="tab-exclusions">
-          <span class="tab-icon">🛡️</span> Excluded Websites
+          <span class="tab-icon">🛡️</span> Enabled Websites
         </button>
       </li>
       <li>
@@ -172,15 +172,15 @@
       <button id="save-network-btn" class="btn btn-primary">Save Network Settings</button>
     </section>
 
-    <!-- TAB 3: Exclusions -->
+    <!-- TAB 3: Per-site opt-in allowlist -->
     <section id="tab-exclusions" class="tab-panel">
       <div class="header-block">
-        <h1>Excluded Websites</h1>
-        <p>Hurry Up completely deactivates itself on these domains (e.g. banking, tests, streaming).</p>
+        <h1>Enabled Websites</h1>
+        <p>Hurry Up! is off on every site by default. Add a domain here (or flip the switch in the popup) to run it there — and only there.</p>
       </div>
 
       <div class="glass-card">
-        <h3 class="glass-card-title">Add Website Exclusion</h3>
+        <h3 class="glass-card-title">Add Website</h3>
         <div style="display: flex; gap: 10px;">
           <input type="text" id="new-domain-input" class="field-input" placeholder="example.com or sub.example.com">
           <button id="add-domain-btn" class="btn btn-primary" style="flex-shrink: 0;">Add Domain</button>
@@ -189,7 +189,7 @@
 
       <div class="glass-card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <h3 class="glass-card-title" style="margin: 0;">Excluded Domains List</h3>
+          <h3 class="glass-card-title" style="margin: 0;">Enabled Domains List</h3>
           <input type="text" id="search-domain-input" class="field-input" placeholder="Filter domains..." style="width: 220px; padding: 7px 12px;">
         </div>
 
@@ -291,7 +291,7 @@
 
       <div class="glass-card">
         <h3 class="glass-card-title">Export Settings</h3>
-        <p class="field-hint" style="margin-bottom: 16px;">Download all your customized timers, exclusions, and selectors as a JSON file.</p>
+        <p class="field-hint" style="margin-bottom: 16px;">Download all your customized timers, enabled websites, and selectors as a JSON file.</p>
         <button id="export-settings-btn" class="btn btn-primary">Export Configuration (.json)</button>
       </div>
 
@@ -304,7 +304,7 @@
 
       <div class="glass-card">
         <h3 class="glass-card-title" style="color: #fb7185;">Factory Reset</h3>
-        <p class="field-hint" style="margin-bottom: 16px;">Reset all settings, excluded websites, and selectors back to original factory defaults.</p>
+        <p class="field-hint" style="margin-bottom: 16px;">Reset all settings, enabled websites, and selectors back to original factory defaults.</p>
         <button id="reset-defaults-btn" class="btn btn-danger">Reset to Defaults</button>
       </div>
     </section>

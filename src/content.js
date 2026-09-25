@@ -6,13 +6,19 @@
  * pages that look like a real countdown gate, and only when the user opted in) unlocks
  * and clicks download controls. See hasDownloadGateSignal() / isElementClickable() for
  * the safety rails that keep this inert on ordinary websites.
+ *
+ * Nothing at all runs until the user opts the current site in via the popup icon
+ * toggle (enabledDomains allowlist) - by default the extension is dormant everywhere.
  */
 
 (async () => {
   if (window.__HURRY_UP_CONTENT_SCRIPT__) return;
   window.__HURRY_UP_CONTENT_SCRIPT__ = true;
 
-  const currentHostname = window.location.hostname;
+  // Local files get the special allowlist entry "file:" so the popup can opt them
+  // in explicitly too (an empty hostname would never match the allowlist).
+  const currentHostname =
+    window.location.protocol === "file:" ? "file:" : window.location.hostname;
 
   // Whether the MAIN-world injector is allowed to touch this page's timers. Stays
   // false until looksLikeCountdownGate() confirms a real countdown / wait gate, so
@@ -44,14 +50,15 @@
     settings = window.HurryUpStorage ? window.HurryUpStorage.DEFAULT_SETTINGS : DEFAULT_SETTINGS;
   }
 
-  const disabled = window.HurryUpStorage 
-    ? window.HurryUpStorage.isDomainDisabled(currentHostname, settings)
-    : isDomainDisabled(currentHostname, settings);
+  // Opt-in model: the extension is dormant on every site until the user turns
+  // it on for this host via the popup icon toggle (or the options dashboard).
+  const siteEnabled = window.HurryUpStorage
+    ? window.HurryUpStorage.isDomainEnabled(currentHostname, settings)
+    : isDomainEnabled(currentHostname, settings);
 
   function syncStateToInjected() {
-    const isSiteEnabled = settings.globalEnabled && !disabled;
     const configPayload = {
-      enabled: isSiteEnabled && timerGateActive,
+      enabled: siteEnabled && timerGateActive,
       speedUpTimers: settings.timerSettings.speedUpTimers,
       mode: settings.timerSettings.mode,
       speedMultiplier: settings.timerSettings.speedMultiplier,
@@ -82,7 +89,7 @@
     }
   });
 
-  if (!settings.globalEnabled || disabled) {
+  if (!siteEnabled) {
     return;
   }
 

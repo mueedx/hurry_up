@@ -29,6 +29,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (url.protocol.startsWith("http")) {
           currentHostname = url.hostname.toLowerCase();
           activeDomainEl.textContent = currentHostname;
+        } else if (url.protocol === "file:") {
+          // Local files use a special allowlist entry (see src/content.js).
+          currentHostname = "file:";
+          activeDomainEl.textContent = "Local file (file://)";
         } else {
           activeDomainEl.textContent = "Browser Internal Page";
           siteToggle.disabled = true;
@@ -42,10 +46,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Reflect settings in popup UI
   function updateUI() {
-    const isSiteDisabled = currentHostname ? isDomainDisabled(currentHostname, settings) : false;
+    // Opt-in model: off on every site by default; the site toggle below opts in.
+    const isSiteListed = currentHostname ? isDomainListed(currentHostname, settings) : false;
     const isGloballyEnabled = settings.globalEnabled;
 
-    siteToggle.checked = !isSiteDisabled && isGloballyEnabled;
+    siteToggle.checked = isGloballyEnabled && isSiteListed;
     globalToggle.checked = isGloballyEnabled;
     timerToggle.checked = settings.timerSettings.speedUpTimers;
     clickToggle.checked = settings.autoClickSettings.autoClick;
@@ -53,8 +58,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!isGloballyEnabled) {
       badgeText.textContent = "Disabled";
       globalBadge.classList.add("disabled");
-    } else if (isSiteDisabled) {
-      badgeText.textContent = "Excluded";
+    } else if (!isSiteListed) {
+      badgeText.textContent = "Off";
       globalBadge.classList.add("disabled");
     } else {
       badgeText.textContent = "Active";
@@ -67,20 +72,20 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   updateUI();
 
-  // Toggle current site enabled/disabled
+  // Opt the current site in / out (allowlist entry for this hostname)
   siteToggle.addEventListener("change", async () => {
     if (!currentHostname) return;
 
     if (siteToggle.checked) {
-      // Remove from disabledDomains
-      settings.disabledDomains = settings.disabledDomains.filter(
-        (d) => d.toLowerCase() !== currentHostname && !currentHostname.endsWith("." + d.toLowerCase())
-      );
-    } else {
-      // Add to disabledDomains
-      if (!settings.disabledDomains.includes(currentHostname)) {
-        settings.disabledDomains.push(currentHostname);
+      // Opt in: add to enabledDomains
+      if (!settings.enabledDomains.includes(currentHostname)) {
+        settings.enabledDomains.push(currentHostname);
       }
+    } else {
+      // Opt out: remove this host and any parent-domain entry that covers it
+      settings.enabledDomains = settings.enabledDomains.filter(
+        (d) => currentHostname !== d.toLowerCase() && !currentHostname.endsWith("." + d.toLowerCase())
+      );
     }
 
     await saveSettings(settings);

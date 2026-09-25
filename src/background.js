@@ -19,7 +19,8 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 });
 
 /**
- * Updates the extension badge text and colors based on whether the current site is disabled
+ * Updates the extension badge: green ON when the user opted this site in,
+ * red OFF otherwise (the default state on every site).
  */
 async function updateTabBadge(tabId, url) {
   if (!tabId || !url || !url.startsWith("http")) {
@@ -31,15 +32,18 @@ async function updateTabBadge(tabId, url) {
     const domain = new URL(url).hostname;
     const settings = typeof getStoredSettings === "function" 
       ? await getStoredSettings() 
-      : { globalEnabled: true, disabledDomains: [] };
+      : { globalEnabled: true, enabledDomains: [] };
 
-    const disabled = isDomainDisabled(domain, settings);
+    const enabled = typeof isDomainEnabled === "function"
+      ? isDomainEnabled(domain, settings)
+      : false;
 
-    if (disabled) {
+    if (enabled) {
+      chrome.action.setBadgeText({ tabId, text: "ON" });
+      chrome.action.setBadgeBackgroundColor({ tabId, color: "#22C55E" }); // Green
+    } else {
       chrome.action.setBadgeText({ tabId, text: "OFF" });
       chrome.action.setBadgeBackgroundColor({ tabId, color: "#EF4444" }); // Red
-    } else {
-      chrome.action.setBadgeText({ tabId, text: "" });
     }
   } catch (err) {
     // URL parsing or tab error

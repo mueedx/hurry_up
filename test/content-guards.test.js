@@ -12,6 +12,9 @@
  *   5. Ordinary and busy client-rendered sites (video search results, dashboards) never
  *      arm the MAIN-world timer patching, so their timers stay fully native.
  *   6. A real gate page *does* arm it, and opting out of gate detection arms it too.
+ *   7. Per-site opt-in: with the default settings (empty enabledDomains allowlist) the
+ *      extension is completely dormant on every site, including gate pages; flipping the
+ *      popup toggle for the site makes gate handling work.
  *
  * Usage:  node test/content-guards.test.js
  */
@@ -83,10 +86,19 @@ function matches(el, selectorList) {
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Hostname the content script sees unless a test overrides it via createPage options.
+const DEFAULT_TEST_HOSTNAME = "example.test";
+
 function settingsWith(patch) {
   const settings = JSON.parse(JSON.stringify(storage.DEFAULT_SETTINGS));
+  // The extension is off on every site by default; behaviour tests opt the
+  // fixture site in (as the popup icon toggle does) unless told otherwise.
+  settings.enabledDomains = [DEFAULT_TEST_HOSTNAME];
   if (patch && patch.autoClickSettings) {
     Object.assign(settings.autoClickSettings, patch.autoClickSettings);
+  }
+  if (patch && Object.prototype.hasOwnProperty.call(patch, "enabledDomains")) {
+    settings.enabledDomains = patch.enabledDomains;
   }
   return settings;
 }
@@ -220,7 +232,7 @@ function createPage(elements, settings, options = {}) {
   const listeners = {};
 
   const windowStub = {
-    location: { hostname: "example.test" },
+    location: { hostname: options.hostname || DEFAULT_TEST_HOSTNAME, protocol: options.protocol || "https:" },
     dispatchEvent: (event) => {
       dispatchedEvents.push(event);
       for (const listener of listeners[event.type] || []) listener(event);
@@ -233,7 +245,8 @@ function createPage(elements, settings, options = {}) {
     HurryUpStorage: {
       DEFAULT_SETTINGS: storage.DEFAULT_SETTINGS,
       getStoredSettings: async () => JSON.parse(JSON.stringify(settings)),
-      isDomainDisabled: storage.isDomainDisabled,
+      isDomainListed: storage.isDomainListed,
+      isDomainEnabled: storage.isDomainEnabled,
       incrementStat: () => {},
     },
   };
@@ -481,11 +494,127 @@ async function testAutoClickOptIn() {
   check("nothing is clicked when auto-click is off", downloadBtn.clicked === 0, `clicked=${downloadBtn.clicked}`);
 }
 
+function makeGateFixture() {
+  const gate = makeEl({
+    tag: "DIV",
+    id: "please-wait-modal",
+    text: "Please wait 10 seconds before downloading...",
+  });
+  const gateMsg = makeEl({ tag: "DIV", id: "gateMsg", text: "Your download will begin shortly" });
+  const downloadBtn = makeEl({
+    tag: "BUTTON",
+    id: "dlBtn",
+    className: "is-hidden",
+    text: "Download",
+    style: { display: "none" },
+  });
+  return { gate, gateMsg, downloadBtn };
+}
+
+async function testSiteOptInIsRequired() {
+  console.log("");
+  console.log("Per-site opt-in (off on every site by default):");
+
+  check(
+    "shipped default allowlist is empty - nothing runs anywhere out of the box",
+    Array.isArray(storage.DEFAULT_SETTINGS.enabledDomains) && storage.DEFAULT_SETTINGS.enabledDomains.length === 0,
+    `enabledDomains=${JSON.stringify(storage.DEFAULT_SETTINGS.enabledDomains)}`
+  );
+
+  // 1. A genuine countdown gate page, auto-click ON, but the site was never switched on.
+  const off = makeGateFixture();
+  const offPage = createPage(
+    [off.gate, off.gateMsg, off.downloadBtn],
+    // Same settings a user has before touching the popup: site not allowlisted.
+    settingsWith({ enabledDomains: [], autoClickSettings: { autoClick: true } })
+  );
+  await loadContentScript(offPage.sandbox);
+  await wait(500);
+
+  check("gate button stays locked until the user switches the site on", off.downloadBtn.classList.contains("is-hidden"));
+  check("gate button keeps display:none while the site is off", off.downloadBtn._style.display === "none");
+  check("gate overlay is not hidden while the site is off", !off.gateMsg.classList.contains("hurry-up-hidden-overlay"));
+  check("nothing is clicked while the site is off", off.downloadBtn.clicked === 0, `clicked=${off.downloadBtn.clicked}`);
+  const offConfig = offPage.latestConfig();
+  check(
+    "MAIN-world timer warping stays disarmed while the site is off",
+    !!offConfig && offConfig.enabled === false,
+    `enabled=${offConfig && offConfig.enabled}`
+  );
+
+  // 2. The same gate page after the user flips the popup toggle for this site.
+  const on = makeGateFixture();
+  const onPage = createPage([on.gate, on.gateMsg, on.downloadBtn], settingsWith({ autoClickSettings: { autoClick: true } }));
+  await loadContentScript(onPage.sandbox);
+  await wait(500);
+
+  check("after opting in, the gate button is unlocked", !on.downloadBtn.classList.contains("is-hidden"));
+  check("after opting in, the gate overlay is suppressed", on.gateMsg.classList.contains("hurry-up-hidden-overlay"));
+  check("after opting in, the button is clicked exactly once", on.downloadBtn.clicked === 1, `clicked=${on.downloadBtn.clicked}`);
+  const onConfig = onPage.latestConfig();
+  check(
+    "after opting in, the gate arms MAIN-world timer warping",
+    !!onConfig && onConfig.enabled === true,
+    `enabled=${onConfig && onConfig.enabled}`
+  );
+
+  // 3. Storage-level helpers behind the toggle.
+  const base = settingsWith();
+  check(
+    "isDomainEnabled is false for an unknown host (fail-safe default)",
+    storage.isDomainEnabled("never-seen.test", base) === false
+  );
+  check(
+    "isDomainEnabled is true for the allowlisted host",
+    storage.isDomainEnabled(DEFAULT_TEST_HOSTNAME, base) === true
+  );
+  check(
+    "isDomainEnabled is true for a subdomain of an allowlisted parent domain",
+    storage.isDomainEnabled("files." + DEFAULT_TEST_HOSTNAME, base) === true
+  );
+  check(
+    "the global switch still overrides the allowlist",
+    storage.isDomainEnabled(DEFAULT_TEST_HOSTNAME, Object.assign({}, base, { globalEnabled: false })) === false
+  );
+
+  // 4. Local file pages (the mock test bench) use the special "file:" allowlist entry.
+  const fileOff = makeGateFixture();
+  const fileOffPage = createPage(
+    [fileOff.gate, fileOff.gateMsg, fileOff.downloadBtn],
+    settingsWith({ enabledDomains: [], autoClickSettings: { autoClick: true } }),
+    { hostname: "", protocol: "file:" }
+  );
+  await loadContentScript(fileOffPage.sandbox);
+  await wait(500);
+  const fileOffConfig = fileOffPage.latestConfig();
+  check(
+    "file:// pages stay dormant until the user opts them in",
+    !!fileOffConfig && fileOffConfig.enabled === false && fileOff.downloadBtn.classList.contains("is-hidden"),
+    `enabled=${fileOffConfig && fileOffConfig.enabled}`
+  );
+
+  const fileOn = makeGateFixture();
+  const fileOnPage = createPage(
+    [fileOn.gate, fileOn.gateMsg, fileOn.downloadBtn],
+    settingsWith({ enabledDomains: ["file:"], autoClickSettings: { autoClick: true } }),
+    { hostname: "", protocol: "file:" }
+  );
+  await loadContentScript(fileOnPage.sandbox);
+  await wait(500);
+  const fileOnConfig = fileOnPage.latestConfig();
+  check(
+    "file:// pages arm the gate once the local file is switched on",
+    !!fileOnConfig && fileOnConfig.enabled === true && !fileOn.downloadBtn.classList.contains("is-hidden"),
+    `enabled=${fileOnConfig && fileOnConfig.enabled}`
+  );
+}
+
 (async () => {
   await testOrdinaryPageIsLeftAlone();
   await testVisibleButtonWithoutGateIsNotClicked();
   await testGatePageStillWorks();
   await testAutoClickOptIn();
+  await testSiteOptInIsRequired();
   await testBusyClientRenderedSiteStaysDisarmed();
   await testLooseWaitCopyIsNotAGate();
   await testGateDetectionOptOutArmsEverything();

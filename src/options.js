@@ -1,6 +1,6 @@
 /**
  * Hurry Up Extension - Options Dashboard Script
- * Manages tab switching, exclusions list, configuration forms, and JSON import/export.
+ * Manages tab switching, the enabled-sites list, configuration forms, and JSON import/export.
  */
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -95,22 +95,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     showToast("Network interceptor settings saved!");
   });
 
-  // Load configuration into Tab 3 (Exclusions)
+  // Load configuration into Tab 3 (Enabled Websites allowlist)
   const exclusionsTableBody = document.getElementById("exclusions-table-body");
   const newDomainInput = document.getElementById("new-domain-input");
   const addDomainBtn = document.getElementById("add-domain-btn");
   const searchDomainInput = document.getElementById("search-domain-input");
 
-  function renderExclusions(filterText = "") {
+  function renderEnabledSites(filterText = "") {
     exclusionsTableBody.innerHTML = "";
-    const domains = (settings.disabledDomains || []).filter((d) =>
+    const domains = (settings.enabledDomains || []).filter((d) =>
       d.toLowerCase().includes(filterText.toLowerCase())
     );
 
     if (domains.length === 0) {
       exclusionsTableBody.innerHTML = `
         <tr>
-          <td colspan="2" class="empty-cell">No excluded websites registered.</td>
+          <td colspan="2" class="empty-cell">No enabled websites yet - Hurry Up! is off everywhere by default.</td>
         </tr>
       `;
       return;
@@ -134,10 +134,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       removeBtn.textContent = "Remove";
 
       removeBtn.addEventListener("click", async () => {
-        settings.disabledDomains = settings.disabledDomains.filter((d) => d !== domain);
+        settings.enabledDomains = settings.enabledDomains.filter((d) => d !== domain);
         await saveSettings(settings);
-        renderExclusions(searchDomainInput.value);
-        showToast(`Removed ${domain} from exclusions`);
+        renderEnabledSites(searchDomainInput.value);
+        showToast(`Removed ${domain} - Hurry Up! is now off there`);
       });
 
       actionTd.appendChild(removeBtn);
@@ -152,19 +152,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!raw) return;
     raw = raw.replace(/^https?:\/\//, "").split("/")[0];
 
-    if (!settings.disabledDomains.includes(raw)) {
-      settings.disabledDomains.push(raw);
+    if (!settings.enabledDomains.includes(raw)) {
+      settings.enabledDomains.push(raw);
       await saveSettings(settings);
       newDomainInput.value = "";
-      renderExclusions(searchDomainInput.value);
-      showToast(`Added ${raw} to excluded sites!`);
+      renderEnabledSites(searchDomainInput.value);
+      showToast(`Enabled Hurry Up! on ${raw}!`);
     } else {
-      showToast("Domain is already excluded", true);
+      showToast("Domain is already enabled", true);
     }
   });
 
   searchDomainInput.addEventListener("input", (e) => {
-    renderExclusions(e.target.value);
+    renderEnabledSites(e.target.value);
   });
 
   // Load configuration into Tab 4 (DOM Overlays & Auto-Click)
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   function initAll() {
     populateTimerFields();
     populateNetworkFields();
-    renderExclusions();
+    renderEnabledSites();
     populateDomFields();
   }
 

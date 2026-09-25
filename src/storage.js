@@ -5,7 +5,11 @@
 const DEFAULT_SETTINGS = {
   version: 1,
   globalEnabled: true,
-  disabledDomains: [],
+  // Opt-in allowlist: the extension is dormant on every site until the user
+  // switches it on (popup icon toggle or options dashboard). A legacy
+  // `disabledDomains` blocklist is intentionally not carried over - with the
+  // new "off by default" model it has no meaning and is dropped on validation.
+  enabledDomains: [],
   timerSettings: {
     speedUpTimers: true,
     mode: "instant", // "instant" (0ms) or "accelerated" (multiplier)
@@ -93,10 +97,12 @@ function validateSettings(config) {
     clean.globalEnabled = config.globalEnabled;
   }
 
-  if (Array.isArray(config.disabledDomains)) {
-    clean.disabledDomains = Array.from(
+  // `enabledDomains` is the opt-in allowlist (and the only domain list now);
+  // any legacy `disabledDomains` key in stored/imported data is dropped.
+  if (Array.isArray(config.enabledDomains)) {
+    clean.enabledDomains = Array.from(
       new Set(
-        config.disabledDomains
+        config.enabledDomains
           .filter((d) => typeof d === "string")
           .map((d) => d.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0])
           .filter(Boolean)
@@ -247,13 +253,24 @@ async function incrementStat(statKey, amount = 1) {
 }
 
 /**
- * Checks if a hostname is excluded
+ * Checks whether a hostname matches the opt-in allowlist (exact host or a
+ * parent domain entry, e.g. "example.com" also covers "files.example.com").
+ * Independent of the global switch - useful for UI state.
  */
-function isDomainDisabled(hostname, settings) {
-  if (!settings || !settings.globalEnabled) return true;
-  if (!hostname || !Array.isArray(settings.disabledDomains)) return false;
+function isDomainListed(hostname, settings) {
+  if (!settings || !hostname || !Array.isArray(settings.enabledDomains)) return false;
   const target = hostname.toLowerCase();
-  return settings.disabledDomains.some((d) => target === d || target.endsWith("." + d));
+  return settings.enabledDomains.some((d) => target === d || target.endsWith("." + d));
+}
+
+/**
+ * Checks whether the extension may act on a hostname: the global switch must
+ * be on AND the site must be in the opt-in allowlist. Fails safe (false) for
+ * missing data, so a site is never enabled by accident.
+ */
+function isDomainEnabled(hostname, settings) {
+  if (!settings || !settings.globalEnabled) return false;
+  return isDomainListed(hostname, settings);
 }
 
 if (typeof module !== "undefined" && module.exports) {
@@ -264,7 +281,8 @@ if (typeof module !== "undefined" && module.exports) {
     getStoredSettings,
     saveSettings,
     incrementStat,
-    isDomainDisabled
+    isDomainListed,
+    isDomainEnabled
   };
 } else if (typeof window !== "undefined") {
   window.HurryUpStorage = {
@@ -274,6 +292,7 @@ if (typeof module !== "undefined" && module.exports) {
     getStoredSettings,
     saveSettings,
     incrementStat,
-    isDomainDisabled
+    isDomainListed,
+    isDomainEnabled
   };
 }
