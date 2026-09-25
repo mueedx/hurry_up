@@ -49,4 +49,7 @@
 - [X] T030 Gate `processOverlays()` behind `looksLikeGateOverlay()` so a countdown-ish class name alone can no longer hide real containers (FR-1.8)
 - [X] T031 Add `test/injected-guards.test.js` and extend `test/content-guards.test.js` with gate-arming / busy-SPA / loose-copy / opt-out cases; confirm both fail against pre-fix revisions via `HURRY_UP_*_SCRIPT` overrides
 
+## Phase 10: Store Submission Prep
+- [X] T032 Draft the store listing copy, permission justifications, data-use answers, screenshot shot list, packaging/versioning steps, and reviewer notes in `specs/001-timer-skipper/store-listing.md`; verify `icons/icon128.png` is 128×128 and manifest name/description fit Chrome limits
+
 

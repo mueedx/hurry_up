@@ -254,9 +254,11 @@ Submission checklist for this repository:
 - [x] **Data-use disclosure:** no data collected, nothing sold, nothing transferred to third parties.
 - [x] **In-repo test evidence** for reviewers: `test/content-guards.test.js` and
       `test/injected-guards.test.js`, plus the manual test bench.
-- [ ] **Screenshots:** at least one at **1280×800** (max 5). Suggested: popup with the per-site
-      toggle, options "Timers & Speed Hack", options "Overlays & Auto-Click".
-- [ ] **Store icon:** 128×128 PNG (already in `icons/icon128.png`); 440×280 promo tile optional.
+- [ ] **Screenshots:** at least one at **1280×800** (max 5). Shot list in
+      [`specs/001-timer-skipper/store-listing.md`](specs/001-timer-skipper/store-listing.md) §5:
+      popup with the per-site toggle, options "Timers & Speed Hack", options "Overlays & Auto-Click".
+- [x] **Store icon:** `icons/icon128.png` verified 128×128 RGBA (`icon16`/`icon48` also present);
+      440×280 promo tile optional.
 - [ ] **Packaging:** zip only the runtime files — `manifest.json`, `icons/`, `src/`. Exclude
       `test/`, `specs/`, `.git/`, `*.md`, and any `.zip` (see `.gitignore`).
 
@@ -265,14 +267,17 @@ Submission checklist for this repository:
 zip -r hurry-up-1.0.0.zip manifest.json icons src -x "*.DS_Store"
 ```
 
-- [ ] **Permission justifications** to paste into the listing:
+- [ ] **Permission justifications** to paste into the listing — drafted ready-to-paste,
+      together with the listing copy, screenshot shot list, and reviewer notes, in
+      [`specs/001-timer-skipper/store-listing.md`](specs/001-timer-skipper/store-listing.md) §3:
   - `storage` — persists user settings and the excluded-domain list locally.
   - `activeTab` — applies the user's chosen action to the active tab.
   - Content script injection — required to neutralise in-page countdown timers on the
     websites the user visits; it does not read, collect, or transmit page data.
 - [ ] **Version bump** in `manifest.json` before each upload (current: `1.0.0`).
 - [ ] **Reviewer note:** auto-clicking is disabled by default, no login or account is required,
-      and countdown behaviour can be verified with the included test harness.
+      and countdown behaviour can be verified with the included test harness (ready-to-paste
+      text in [`store-listing.md`](specs/001-timer-skipper/store-listing.md) §7).
 
 ---
 
